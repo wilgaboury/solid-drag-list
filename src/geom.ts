@@ -46,7 +46,7 @@ export function clientToPage<T extends Position>(pos: T): T {
 
 export function clientToRelative<T extends Position>(
   pos: T,
-  elem: HTMLElement
+  elem: HTMLElement,
 ): T {
   const rect = elemClientRect(elem);
   return {
@@ -58,7 +58,7 @@ export function clientToRelative<T extends Position>(
 
 export function pageToRelative<T extends Position>(
   pos: T,
-  elem: HTMLElement
+  elem: HTMLElement,
 ): T {
   const rect = clientToPage(elemClientRect(elem));
   return {
