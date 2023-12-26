@@ -449,8 +449,9 @@ const SortableDirectiveContext = createContext<SortableDirectiveContextValue>(
 
 export function sortableHandle(el: Element, _accessor: () => any) {
   const directives = useContext(SortableDirectiveContext);
-  if (el instanceof HTMLElement) {
-    directives.setHandle?.(el);
+  if (el instanceof HTMLElement && directives.setHandle) {
+    directives.setHandle(el);
+    el.style.cursor = "grab";
   }
 }
 
@@ -617,8 +618,20 @@ export function Sortable<T, U extends JSX.Element>(props: SortableProps<T, U>) {
             createEffect(() => {
               if (isMouseDown()) {
                 itemElem.classList.add("sortable-mousedown");
+
+                document.body.style.cursor = "grabbing";
+                for (const handleElem of handleElems) {
+                  handleElem.style.cursor = "grabbing";
+                }
               }
-              onCleanup(() => itemElem.classList.remove("sortable-mousedown"));
+              onCleanup(() => {
+                itemElem.classList.remove("sortable-mousedown");
+
+                document.body.style.cursor = "unset";
+                for (const handleElem of handleElems) {
+                  handleElem.style.cursor = "grab";
+                }
+              });
             });
 
             // manage html element map used for layouting
@@ -653,8 +666,9 @@ export function Sortable<T, U extends JSX.Element>(props: SortableProps<T, U>) {
                       fill: "forwards",
                     },
                   );
-                  anim.onfinish = () =>
+                  anim.onfinish = () => {
                     itemElem.classList.remove("sortable-animating");
+                  };
                 }
               }
             });
