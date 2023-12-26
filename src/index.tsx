@@ -13,7 +13,6 @@ export const Hello: Component<{ to?: string }> = (props) => {
 
   // Console calls will be removed in production if `dropConsole` is enabled
 
-  // eslint-disable-next-line no-console
   console.log("Hello World!");
 
   createComputed(() => {
