@@ -1,4 +1,4 @@
-import { createSignal, type Component, batch } from "solid-js";
+import { createSignal, type Component, batch, Show } from "solid-js";
 import styles from "./App.module.css";
 import {
   Sortable,
@@ -14,10 +14,13 @@ sortableHandle;
 const layouts = ["flow", "horizontal", "vertical"] as const;
 type Layout = (typeof layouts)[number];
 
-function getLayout(layout: Layout) {
+const aligns = ["left", "center", "right"] as const;
+type Align = (typeof aligns)[number];
+
+function getLayout(layout: Layout, align: Align) {
   switch (layout) {
     case "flow":
-      return flowGridLayout();
+      return flowGridLayout({ align });
     case "horizontal":
       return horizontalLayout();
     case "vertical":
@@ -29,6 +32,7 @@ const App: Component = () => {
   const [data, setData] = createSignal<ReadonlyArray<number>>([]);
   const [count, setCount] = createSignal(0);
   const [layoutIdx, setLayoutIdx] = createSignal(0);
+  const [alignIdx, setAlignIdx] = createSignal(0);
 
   return (
     <div class={styles.App}>
@@ -50,10 +54,18 @@ const App: Component = () => {
         >
           Layout: {layouts[layoutIdx()]}
         </button>
+        <Show when={layouts[layoutIdx()] === "flow"}>
+          <button
+            style={{ margin: "24px", padding: "8px" }}
+            onClick={() => setAlignIdx((cur) => (cur + 1) % aligns.length)}
+          >
+            Align: {aligns[alignIdx()]}
+          </button>
+        </Show>
       </div>
       <Sortable
         each={data()}
-        layout={getLayout(layouts[layoutIdx()]!)}
+        layout={getLayout(layouts[layoutIdx()]!, aligns[alignIdx()]!)}
         onMove={(_item, from, to) => {
           setData((cur) => move([...cur], from, to));
         }}
