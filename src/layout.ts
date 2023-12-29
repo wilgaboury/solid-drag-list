@@ -1,6 +1,5 @@
 import { createSignal } from "solid-js";
 
-import { assertExhaustive, clamp, mod, zip } from "./util";
 import {
   Position,
   Rect,
@@ -11,6 +10,7 @@ import {
   intersects,
   pageToRelative,
 } from "./geom";
+import { assertExhaustive, clamp, mod, zip } from "./util";
 
 export interface Layout {
   readonly pos: (idx: number) => Position;

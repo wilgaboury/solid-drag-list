@@ -16,7 +16,6 @@ import {
   useContext,
 } from "solid-js";
 
-import { mapZeroOneToZeroInf, normalize } from "./util";
 import {
   Position,
   Rect,
@@ -31,6 +30,7 @@ import {
   toSize,
 } from "./geom";
 import { Layouter } from "./layout";
+import { mapZeroOneToZeroInf, normalize } from "./util";
 
 interface SortableHooks<T> {
   readonly onClick?: (item: T, idx: number, e: MouseEvent) => void;

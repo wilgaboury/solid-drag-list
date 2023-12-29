@@ -50,6 +50,7 @@
     "lint": "concurrently pnpm:lint:*",
     "lint:code": "eslint --ignore-path .gitignore --max-warnings 0 src/**/*.{js,ts,tsx,jsx}",
     "lint:types": "tsc --noEmit",
+    "fix": "pnpm run lint:code --fix",
     "update-deps": "pnpm up -Li"
   },
   "peerDependencies": {
