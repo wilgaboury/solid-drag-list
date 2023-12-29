@@ -52,17 +52,12 @@ export function difference<T>(set1: Set<T>, set2: Set<T>): Set<T> {
 
 export function move<T>(
   arr: ReadonlyArray<T>,
-  fromIdx: number,
-  toIdx: number,
+  from: number,
+  to: number,
+  count: number = 1,
 ): ReadonlyArray<T> {
-  const elem = arr[fromIdx];
-  if (elem == null) {
-    console.error("index out of bounds");
-    return arr;
-  }
   const ret = [...arr];
-  ret.splice(fromIdx, 1);
-  ret.splice(toIdx, 0, elem);
+  ret.splice(to, 0, ...ret.splice(from, count));
   return ret;
 }
 

@@ -16,7 +16,7 @@ import {
   useContext,
 } from "solid-js";
 
-import { mapZeroOneToZeroInf, normalize } from "./assorted";
+import { mapZeroOneToZeroInf, normalize } from "./util";
 import {
   Position,
   Rect,

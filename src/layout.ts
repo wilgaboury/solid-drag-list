@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
 
-import { assertExhaustive, clamp, mod, zip } from "./assorted";
+import { assertExhaustive, clamp, mod, zip } from "./util";
 import {
   Position,
   Rect,
