@@ -631,8 +631,8 @@ export function Sortable<T, U extends JSX.Element>(props: SortableProps<T, U>) {
               props.autoscroll === true
                 ? containerElem
                 : props.autoscroll === false
-                ? undefined
-                : props.autoscroll,
+                  ? undefined
+                  : props.autoscroll,
             );
 
             itemElem.style.visibility = "hidden";
