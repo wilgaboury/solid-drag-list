@@ -51,18 +51,30 @@ export function difference<T>(set1: Set<T>, set2: Set<T>): Set<T> {
 }
 
 export function move<T>(
-  arr: Array<T>,
+  arr: ReadonlyArray<T>,
   fromIdx: number,
   toIdx: number,
-): Array<T> {
+): ReadonlyArray<T> {
   const elem = arr[fromIdx];
   if (elem == null) {
     console.error("index out of bounds");
     return arr;
   }
-  arr.splice(fromIdx, 1);
-  arr.splice(toIdx, 0, elem);
-  return arr;
+  const ret = [...arr];
+  ret.splice(fromIdx, 1);
+  ret.splice(toIdx, 0, elem);
+  return ret;
+}
+
+export function splice<T>(
+  arr: ReadonlyArray<T>,
+  index: number,
+  count: number,
+  ...items: T[]
+) {
+  const tmp = [...arr];
+  tmp.splice(index, count, ...items);
+  return tmp;
 }
 
 export function zip<A, B>(

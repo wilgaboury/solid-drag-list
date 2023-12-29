@@ -6,6 +6,7 @@ import {
   horizontalLayout,
   move,
   sortableHandle,
+  splice,
   verticalLayout,
 } from "../src";
 
@@ -71,7 +72,7 @@ const App: Component = () => {
         each={data()}
         layout={getLayout(layouts[layoutIdx()]!, aligns[alignIdx()]!)}
         onMove={(_item, from, to) => {
-          setData((cur) => move([...cur], from, to));
+          setData((cur) => move(cur, from, to));
         }}
         autoscroll={document.documentElement}
       >
@@ -84,13 +85,7 @@ const App: Component = () => {
             <div use:sortableHandle class={styles.handle} />
             <button
               class={styles.button}
-              onClick={() =>
-                setData((cur) => {
-                  const tmp = [...cur];
-                  tmp.splice(idx(), 1);
-                  return tmp;
-                })
-              }
+              onClick={() => setData((cur) => splice(cur, idx(), 1))}
             >
               Remove
             </button>

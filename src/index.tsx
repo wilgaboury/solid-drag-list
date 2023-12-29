@@ -1,7 +1,7 @@
 import { Accessor, Component, createComputed, createSignal } from "solid-js";
 export * from "./Sortable";
 export * from "./layout";
-export { move } from "./assorted";
+export { move, splice } from "./assorted";
 
 export function createHello(): [Accessor<string>, (to: string) => void] {
   const [hello, setHello] = createSignal("Hello World!");
