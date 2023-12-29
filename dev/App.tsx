@@ -33,12 +33,16 @@ const App: Component = () => {
   const [count, setCount] = createSignal(0);
   const [layoutIdx, setLayoutIdx] = createSignal(0);
   const [alignIdx, setAlignIdx] = createSignal(0);
+  const [wide, setWide] = createSignal(true);
 
   return (
     <div class={styles.App}>
       <div>
+        <button class={styles.button} onClick={() => setWide((cur) => !cur)}>
+          wide: {wide() ? "true" : "false"}
+        </button>
         <button
-          style={{ margin: "24px", padding: "8px" }}
+          class={styles.button}
           onClick={() =>
             batch(() => {
               setCount((cur) => cur + 1);
@@ -49,14 +53,14 @@ const App: Component = () => {
           Count: {count()}
         </button>
         <button
-          style={{ margin: "24px", padding: "8px" }}
+          class={styles.button}
           onClick={() => setLayoutIdx((cur) => (cur + 1) % layouts.length)}
         >
           Layout: {layouts[layoutIdx()]}
         </button>
         <Show when={layouts[layoutIdx()] === "flow"}>
           <button
-            style={{ margin: "24px", padding: "8px" }}
+            class={styles.button}
             onClick={() => setAlignIdx((cur) => (cur + 1) % aligns.length)}
           >
             Align: {aligns[alignIdx()]}
@@ -71,10 +75,25 @@ const App: Component = () => {
         }}
         autoscroll={document.documentElement}
       >
-        {({ item }) => (
-          <div class={styles.block}>
+        {({ item, idx }) => (
+          <div
+            class={styles.block}
+            style={{ width: wide() ? "300px" : "150px" }}
+          >
             #{item}
             <div use:sortableHandle class={styles.handle} />
+            <button
+              class={styles.button}
+              onClick={() =>
+                setData((cur) => {
+                  const tmp = [...cur];
+                  tmp.splice(idx(), 1);
+                  return tmp;
+                })
+              }
+            >
+              Remove
+            </button>
           </div>
         )}
       </Sortable>

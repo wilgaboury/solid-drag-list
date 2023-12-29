@@ -445,6 +445,22 @@ const SortableDirectiveContext = createContext<SortableDirectiveContextValue>(
   {},
 );
 
+function sizesEqual(
+  sizes1: ReadonlyArray<Size>,
+  sizes2: ReadonlyArray<Size>,
+): boolean {
+  if (sizes1.length != sizes2.length) return false;
+
+  for (let i = 0; i < sizes1.length; i++) {
+    const size1 = sizes1[i]!;
+    const size2 = sizes2[i]!;
+    if (size1.width != size2.width || size1.height != size2.height)
+      return false;
+  }
+
+  return true;
+}
+
 export function sortableHandle(el: Element, _accessor: () => any) {
   const directives = useContext(SortableDirectiveContext);
   if (el instanceof HTMLElement && directives.setHandle) {
@@ -489,22 +505,30 @@ export function Sortable<T, U extends JSX.Element>(props: SortableProps<T, U>) {
   });
 
   const itemToElem = new Map<T, HTMLElement>();
-  // TODO: set custom equals method so this doesn't trigger unnecessary layout calls
-  const [itemElems, setItemElems] = createSignal<ReadonlyArray<HTMLElement>>(
+
+  const [sizesDepend, sizesTrigger] = createSignal(undefined, {
+    equals: false,
+  });
+
+  const sizes = createMemo(
+    () => {
+      sizesDepend();
+      return (
+        props.each
+          .map((item) => itemToElem.get(item))
+          .filter((i) => i != null) as HTMLElement[]
+      )
+        .map(elemClientRect)
+        .map(toSize);
+    },
     [],
+    {
+      equals: sizesEqual,
+    },
   );
-  const layout = createMemo(() =>
-    layouter().layout(itemElems().map(elemClientRect).map(toSize)),
-  );
-  function updateItemElems() {
-    // fast check to eliminate unnecessary array operations
-    if (props.each.length != itemToElem.size) return;
-    const tmpItemElems = props.each.map((item) => itemToElem.get(item));
-    if (tmpItemElems.every((e) => e != null)) {
-      setItemElems(tmpItemElems as HTMLElement[]);
-    }
-  }
-  createEffect(on(() => props.each, updateItemElems, { defer: true }));
+  const layout = createMemo(() => {
+    return layouter().layout(sizes());
+  });
 
   const dragHandler: DragHandler<T> =
     sortableContext != null ? sortableContext.dragHandler : createDragHandler();
@@ -526,6 +550,8 @@ export function Sortable<T, U extends JSX.Element>(props: SortableProps<T, U>) {
       }
     });
   });
+
+  const resizeObserver = new ResizeObserver(sizesTrigger);
 
   return (
     <div class="sortable" ref={containerRef} style={{ position: "relative" }}>
@@ -592,6 +618,9 @@ export function Sortable<T, U extends JSX.Element>(props: SortableProps<T, U>) {
             const handleElems =
               handleElemsTest.length > 0 ? handleElemsTest : [itemElem];
 
+            resizeObserver.observe(itemElem);
+            onCleanup(() => resizeObserver.unobserve(itemElem));
+
             function setHandleCursor(cursor: string) {
               for (const handleElem of handleElems) {
                 handleElem.style.cursor = cursor;
@@ -636,10 +665,10 @@ export function Sortable<T, U extends JSX.Element>(props: SortableProps<T, U>) {
 
             // manage html element map used for layouting
             itemToElem.set(item, itemElem);
-            updateItemElems();
+            sizesTrigger();
             onCleanup(() => {
               itemToElem.delete(item);
-              updateItemElems();
+              sizesTrigger();
             });
 
             // reactivley calc position and apply animation effect

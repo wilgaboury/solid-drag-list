@@ -1,4 +1,4 @@
-import { createEffect, createSignal } from "solid-js";
+import { createSignal } from "solid-js";
 
 import { assertExhaustive, clamp, mod, zip } from "./assorted";
 import {
@@ -22,18 +22,6 @@ export interface Layouter {
   readonly layout: (sizes: ReadonlyArray<Size>) => Layout;
 }
 
-export function createLayoutEffect(trackRelayout?: () => void) {
-  const [depend, trigger] = createSignal(undefined, {
-    equals: false,
-  });
-  createEffect(() => {
-    trackRelayout?.();
-    // delay layout until after reactions are finished
-    queueMicrotask(() => trigger());
-  });
-  return depend;
-}
-
 /**
  * Lays out an array of elements in a grid with elements going from left to right and wrapping
  * based on the width of the containing element. It will make each grid cell the size of the
@@ -42,7 +30,6 @@ export function createLayoutEffect(trackRelayout?: () => void) {
  * @param trackRelayout hook for reactive variable changes to cause a relayout
  */
 export function flowGridLayout(options?: {
-  layoutEffect?: () => void;
   align?: "left" | "center" | "right";
   alignItems?: "left" | "center" | "right";
   flowDirection?: "right" | "left" | "down" | "up";
@@ -118,29 +105,32 @@ export function flowGridLayout(options?: {
     return xidx == null || yidx == null ? null : xidx + yidx * cols;
   }
 
-  let observer: ResizeObserver | undefined;
   let container: HTMLElement | undefined;
-  const [width, setWidth] = createSignal(0);
-  const relayout = createLayoutEffect(options?.layoutEffect);
+  const [width, setWidth] = createSignal(0, {
+    equals: (v1, v2) => v1 === v2,
+  });
+  const observer = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.target instanceof HTMLElement) {
+        setWidth(elemClientRect(entry.target).width);
+      }
+    }
+  });
 
   return {
     mount: (elem) => {
       container = elem;
-      observer = new ResizeObserver(() => {
-        setWidth(elemClientRect(elem).width);
-      });
-      setWidth(elemClientRect(elem).width);
-      observer.observe(elem);
-
+      observer.observe(container);
       container.style.width = "100%";
       container.style.height = "100%";
     },
     unmount: () => {
+      if (container != null) {
+        observer.unobserve(container);
+      }
       container = undefined;
-      observer?.disconnect();
     },
     layout: (sizes) => {
-      relayout();
       const itemWidth = Math.max(0, ...sizes.map((s) => s.width));
       const itemHeight = Math.max(0, ...sizes.map((s) => s.height));
 
@@ -210,12 +200,7 @@ type LinearLayoutDirection =
   | typeof HorizonalDirection
   | typeof VerticalDirection;
 
-function linearLayout(
-  direction: LinearLayoutDirection,
-  trackRelayout?: () => void,
-): Layouter {
-  const relayout = createLayoutEffect(trackRelayout);
-
+function linearLayout(direction: LinearLayoutDirection): Layouter {
   let container: HTMLElement | undefined;
 
   return {
@@ -226,8 +211,6 @@ function linearLayout(
       container = undefined;
     },
     layout: (sizes) => {
-      relayout();
-
       const positions: Array<Position> = [];
       let sum = 0;
       for (const size of sizes) {
@@ -281,10 +264,10 @@ function linearLayout(
   };
 }
 
-export function horizontalLayout(trackRelayout?: () => void) {
-  return linearLayout(HorizonalDirection, trackRelayout);
+export function horizontalLayout() {
+  return linearLayout(HorizonalDirection);
 }
 
-export function verticalLayout(trackRelayout?: () => void) {
-  return linearLayout(VerticalDirection, trackRelayout);
+export function verticalLayout() {
+  return linearLayout(VerticalDirection);
 }
