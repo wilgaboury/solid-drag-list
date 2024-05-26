@@ -76,6 +76,10 @@ export function elemPageRect(elem: HTMLElement) {
   return clientToPage(elemClientRect(elem));
 }
 
+export function elemParentRelativeRect(elem: HTMLElement): Rect {
+  return clientToRelative(elemClientRect(elem), elem.parentElement!);
+}
+
 export function toSize<T extends Size>(size: T): Size {
   const { width, height } = size;
   return { width, height };
@@ -93,4 +97,16 @@ export function toRect<T extends Rect>(rect: T): Rect {
 
 export function dist(p1: Position, p2: Position) {
   return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+}
+
+export function posEquals(p1: Position, p2: Position): boolean {
+  return p1.x === p2.x && p1.y === p2.y;
+}
+
+export function sizeEquals(s1: Size, s2: Size): boolean {
+  return s1.width === s2.width && s1.height === s2.height;
+}
+
+export function rectEquals(r1: Rect, r2: Rect): boolean {
+  return posEquals(r1, r2) && sizeEquals(r1, r2);
 }

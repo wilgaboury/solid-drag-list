@@ -1,7 +1,6 @@
 import { render } from "solid-js/web";
 import "./styles.css";
-
-import App from "./App";
+import { Pages } from "./Pages";
 
 declare module "solid-js" {
   namespace JSX {
@@ -11,4 +10,4 @@ declare module "solid-js" {
   }
 }
 
-render(() => <App />, document.getElementById("root")!);
+render(() => <Pages />, document.getElementById("root")!);

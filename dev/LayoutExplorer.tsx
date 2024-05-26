@@ -1,5 +1,5 @@
 import { createSignal, type Component, batch, Show } from "solid-js";
-import styles from "./App.module.css";
+import styles from "./LayoutExploerer.module.css";
 import {
   Sortable,
   flowGridLayout,
@@ -29,7 +29,7 @@ function getLayout(layout: Layout, align: Align) {
   }
 }
 
-const App: Component = () => {
+export function LayoutExplorer() {
   const [data, setData] = createSignal<ReadonlyArray<number>>([]);
   const [count, setCount] = createSignal(0);
   const [layoutIdx, setLayoutIdx] = createSignal(0);
@@ -94,6 +94,4 @@ const App: Component = () => {
       </Sortable>
     </div>
   );
-};
-
-export default App;
+}
