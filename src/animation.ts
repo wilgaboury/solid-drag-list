@@ -9,19 +9,24 @@ interface ControllerHandle {
 
 const controllers: Array<ControllerHandle> = [];
 
-function loop(time: DOMHighResTimeStamp) {
+function frame(time: DOMHighResTimeStamp) {
+  // Breaking the controller into steps ensures that this never causes more than one
+  // forced reflow, which significantly improves performance.
+
   for (const controller of controllers) {
     controller.clear();
   }
+
   for (const controller of controllers) {
     controller.measure();
   }
+
   for (const controller of controllers) {
     controller.animate(time);
   }
 
   if (controllers.length > 0) {
-    requestAnimationFrame(loop);
+    requestAnimationFrame(frame);
   }
 }
 
@@ -97,7 +102,7 @@ export function createSortableAnimationController(
   const idx = controllers.length;
   controllers.push(handle);
   if (idx == 0) {
-    requestAnimationFrame(loop);
+    requestAnimationFrame(frame);
   }
 
   return {
