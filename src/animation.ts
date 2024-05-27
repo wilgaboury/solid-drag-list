@@ -21,6 +21,7 @@ interface ChildController {
 }
 
 export function createdSortableAnimationController(init: {
+  element: HTMLElement;
   easeFunc: EaseFunction;
   easeTime: number;
 }): SortableAnimationController {
@@ -40,9 +41,18 @@ export function createdSortableAnimationController(init: {
     }
   };
 
+  const mutationObserver = new MutationObserver(update);
+  const resizeObserver = new ResizeObserver(update);
+
+  mutationObserver.observe(init.element, {
+    attributes: true,
+    attributeFilter: ["style"],
+  });
+  resizeObserver.observe(init.element);
+
   return {
     update,
-    create: (element: HTMLElement) => {
+    create: (element) => {
       const child = createChildController({
         request,
         element,
@@ -80,7 +90,10 @@ function createChildController(args: {
   const mutationObserver = new MutationObserver(args.update);
   const resizeObserver = new ResizeObserver(args.update);
 
-  mutationObserver.observe(args.element);
+  mutationObserver.observe(args.element, {
+    attributes: true,
+    attributeFilter: ["style"],
+  });
   resizeObserver.observe(args.element);
 
   return {
@@ -90,10 +103,13 @@ function createChildController(args: {
           return;
         }
 
+        console.log("update");
+
         args.element.style.transform = "";
 
         const currentLayoutRect = elemParentRelativeRect(args.element);
         if (!posEquals(layoutPos, currentLayoutRect)) {
+          console.log("new position");
           newLayoutPos = currentLayoutRect;
           args.request();
         }
@@ -119,9 +135,11 @@ function createChildController(args: {
       },
     },
     frame: (time) => {
-      if (!enabled || !animating() || !startAnimating()) {
+      if (!enabled || (!animating() && !startAnimating())) {
         return;
       }
+
+      console.log("frame?");
 
       if (newLayoutPos != null) {
         if (startTime == null) {
@@ -137,6 +155,7 @@ function createChildController(args: {
 
       const elapsed = time - startTime!;
       if (elapsed <= 0) {
+        args.request();
         return;
       } else if (elapsed > args.easeTime) {
         args.element.style.transform = "";
@@ -146,14 +165,18 @@ function createChildController(args: {
         return;
       }
 
+      console.log(elapsed);
+
       const frac = args.easeFunc(elapsed / args.easeTime);
       currentPos = {
         x: startPos!.x + frac * (layoutPos.x - startPos!.x),
         y: startPos!.y + frac * (layoutPos.y - startPos!.y),
       };
+      // console.log(currentPos);
       const deltaX = currentPos.x - layoutPos.x;
       const deltaY = currentPos.y - layoutPos.y;
       args.element.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+      console.log(args.element.style.transform);
       args.request();
     },
   };
