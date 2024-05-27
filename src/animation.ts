@@ -96,6 +96,18 @@ function createChildController(args: {
   });
   resizeObserver.observe(args.element);
 
+  const bypassMutationObserver = (callback: () => any) => {
+    if (mutationObserver.takeRecords().length > 0) {
+      queueMicrotask(args.update);
+    }
+    mutationObserver.disconnect();
+    callback();
+    mutationObserver.observe(args.element, {
+      attributes: true,
+      attributeFilter: ["style"],
+    });
+  };
+
   return {
     controller: {
       update: () => {
@@ -103,9 +115,7 @@ function createChildController(args: {
           return;
         }
 
-        console.log("update");
-
-        args.element.style.transform = "";
+        bypassMutationObserver(() => (args.element.style.transform = ""));
 
         const currentLayoutRect = elemParentRelativeRect(args.element);
         if (!posEquals(layoutPos, currentLayoutRect)) {
@@ -139,8 +149,6 @@ function createChildController(args: {
         return;
       }
 
-      console.log("frame?");
-
       if (newLayoutPos != null) {
         if (startTime == null) {
           startPos = layoutPos;
@@ -154,29 +162,25 @@ function createChildController(args: {
       }
 
       const elapsed = time - startTime!;
-      if (elapsed <= 0) {
-        args.request();
-        return;
-      } else if (elapsed > args.easeTime) {
-        args.element.style.transform = "";
+      if (elapsed > args.easeTime) {
+        bypassMutationObserver(() => (args.element.style.transform = ""));
         startTime = undefined;
         startPos = undefined;
         currentPos = undefined;
         return;
       }
 
-      console.log(elapsed);
-
       const frac = args.easeFunc(elapsed / args.easeTime);
       currentPos = {
         x: startPos!.x + frac * (layoutPos.x - startPos!.x),
         y: startPos!.y + frac * (layoutPos.y - startPos!.y),
       };
-      // console.log(currentPos);
       const deltaX = currentPos.x - layoutPos.x;
       const deltaY = currentPos.y - layoutPos.y;
-      args.element.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
-      console.log(args.element.style.transform);
+      bypassMutationObserver(
+        () =>
+          (args.element.style.transform = `translate(${deltaX}px, ${deltaY}px)`),
+      );
       args.request();
     },
   };

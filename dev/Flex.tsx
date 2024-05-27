@@ -33,7 +33,7 @@ function animate(element: HTMLElement) {
 }
 
 export const FlexPage: Component = () => {
-  const [elements, setElements] = createSignal(Array.from(Array(2).keys()));
+  const [elements, setElements] = createSignal(Array.from(Array(12).keys()));
   let ref: HTMLDivElement | undefined;
   let controller: SortableAnimationController | undefined;
 
@@ -64,6 +64,8 @@ export const FlexPage: Component = () => {
         style={{
           display: "flex",
           "flex-wrap": "wrap",
+          padding: "50px",
+          gap: "25px",
         }}
       >
         <For each={elements()}>
@@ -74,7 +76,7 @@ export const FlexPage: Component = () => {
               const child = controller!.create(childRef!);
               createEffect(
                 on(idx, () => {
-                  queueMicrotask(() => child.update());
+                  controller?.update();
                 }),
               );
               onCleanup(child.cleanup);
