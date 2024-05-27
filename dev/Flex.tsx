@@ -1,19 +1,7 @@
-import {
-  Component,
-  For,
-  createEffect,
-  createSignal,
-  on,
-  onCleanup,
-  onMount,
-} from "solid-js";
+import { Component, For, createSignal, onCleanup, onMount } from "solid-js";
 
-import {
-  SortableAnimationController,
-  createdSortableAnimationController,
-} from "../src/animation";
+import { createSortableAnimationController } from "../src/animation";
 import { easeInOutSine } from "../src/ease";
-import { off } from "process";
 
 function getRandomColor() {
   var letters = "0123456789ABCDEF";
@@ -24,28 +12,8 @@ function getRandomColor() {
   return color;
 }
 
-let offset = 0;
-
-function animate(element: HTMLElement) {
-  element.style.transform = `translate(${offset}px,${offset}px)`;
-  offset += 1;
-  requestAnimationFrame(() => animate(element));
-}
-
 export const FlexPage: Component = () => {
-  const [elements, setElements] = createSignal(Array.from(Array(12).keys()));
-  let ref: HTMLDivElement | undefined;
-  let controller: SortableAnimationController | undefined;
-
-  onMount(() => {
-    controller = createdSortableAnimationController({
-      element: ref!,
-      easeFunc: easeInOutSine,
-      easeTime: 1000,
-    });
-
-    // requestAnimationFrame(() => animate(ref!));
-  });
+  const [elements, setElements] = createSignal(Array.from(Array(200).keys()));
 
   return (
     <>
@@ -60,7 +28,6 @@ export const FlexPage: Component = () => {
         Rotate
       </button>
       <div
-        ref={ref}
         style={{
           display: "flex",
           "flex-wrap": "wrap",
@@ -73,13 +40,12 @@ export const FlexPage: Component = () => {
             let childRef: HTMLDivElement | undefined;
 
             onMount(() => {
-              const child = controller!.create(childRef!);
-              createEffect(
-                on(idx, () => {
-                  controller?.update();
-                }),
+              const controller = createSortableAnimationController(
+                childRef!,
+                () => easeInOutSine,
+                () => 250,
               );
-              onCleanup(child.cleanup);
+              onCleanup(controller.cleanup);
             });
 
             return (
