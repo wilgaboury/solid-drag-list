@@ -1,7 +1,7 @@
 import { Component, For, createSignal, onCleanup, onMount } from "solid-js";
 
 import { createSortableAnimationController } from "../src/animation";
-import { easeInOutSine } from "../src/ease";
+import { easeInOutSine, easeInSine, easeOutSine } from "../src/ease";
 import { Sortable2 } from "../src/Sortable2";
 import { move } from "../src";
 
@@ -18,6 +18,7 @@ export const FlexPage: Component = () => {
   const [elements, setElements] = createSignal<ReadonlyArray<number>>(
     Array.from(Array(20).keys()),
   );
+  const [largeGap, setLargeGap] = createSignal(false);
 
   return (
     <>
@@ -31,12 +32,37 @@ export const FlexPage: Component = () => {
       >
         Rotate
       </button>
+      <button
+        onClick={() => {
+          setElements((arr) => [...arr.slice(1), arr[0]!]);
+        }}
+      >
+        Rotate Back
+      </button>
+      <button
+        onClick={() => {
+          setElements((arr) => [
+            ...arr,
+            arr.reduce((v1, v2) => Math.max(v1, v2), 0) + 1,
+          ]);
+        }}
+      >
+        Add
+      </button>
+      <button
+        onClick={() => {
+          setElements((arr) => arr.slice(0, arr.length - 1));
+        }}
+      >
+        Remove
+      </button>
+      <button onClick={() => setLargeGap((v) => !v)}>Gap</button>
       <div
         style={{
           display: "flex",
           "flex-wrap": "wrap",
           padding: "50px",
-          gap: "25px",
+          gap: largeGap() ? "50px" : "25px",
           "user-select": "none",
         }}
       >
@@ -72,8 +98,9 @@ export const FlexPage: Component = () => {
         <Sortable2
           each={elements()}
           onMove={(_item, from, to) => setElements((e) => move(e, from, to))}
-          // animated
-          // easeDurationMs={1000}
+          animated
+          easeDurationMs={250}
+          easeFunction={easeOutSine}
         >
           {({ item, isMouseDown }) => {
             const color = getRandomColor();
