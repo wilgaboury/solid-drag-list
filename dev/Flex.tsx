@@ -2,6 +2,8 @@ import { Component, For, createSignal, onCleanup, onMount } from "solid-js";
 
 import { createSortableAnimationController } from "../src/animation";
 import { easeInOutSine } from "../src/ease";
+import { Sortable2 } from "../src/Sortable2";
+import { move } from "../src";
 
 function getRandomColor() {
   var letters = "0123456789ABCDEF";
@@ -13,7 +15,9 @@ function getRandomColor() {
 }
 
 export const FlexPage: Component = () => {
-  const [elements, setElements] = createSignal(Array.from(Array(200).keys()));
+  const [elements, setElements] = createSignal<ReadonlyArray<number>>(
+    Array.from(Array(20).keys()),
+  );
 
   return (
     <>
@@ -33,9 +37,10 @@ export const FlexPage: Component = () => {
           "flex-wrap": "wrap",
           padding: "50px",
           gap: "25px",
+          "user-select": "none",
         }}
       >
-        <For each={elements()}>
+        {/* <For each={elements()}>
           {(element, idx) => {
             let childRef: HTMLDivElement | undefined;
 
@@ -63,7 +68,32 @@ export const FlexPage: Component = () => {
               </div>
             );
           }}
-        </For>
+        </For> */}
+        <Sortable2
+          each={elements()}
+          onMove={(_item, from, to) => setElements((e) => move(e, from, to))}
+          // animated
+          // easeDurationMs={1000}
+        >
+          {({ item, isMouseDown }) => {
+            const color = getRandomColor();
+            return (
+              <div
+                style={{
+                  width: "100px",
+                  height: "100px",
+                  "background-color": color,
+                  color: "black",
+                  border: isMouseDown()
+                    ? "2px solid blue"
+                    : "2px solid transparent",
+                }}
+              >
+                {item}
+              </div>
+            );
+          }}
+        </Sortable2>
       </div>
     </>
   );

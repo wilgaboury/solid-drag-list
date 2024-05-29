@@ -1,5 +1,5 @@
 import { EaseFunction } from "./ease";
-import { Position, elemParentRelativeRect, posEquals } from "./geom";
+import { Position, clientToRelative, posEquals } from "./geom";
 
 interface ControllerHandle {
   readonly clear: () => void;
@@ -33,6 +33,8 @@ function frame(time: DOMHighResTimeStamp) {
 export interface SortableAnimationController {
   readonly enable: (start?: Position) => void;
   readonly disable: () => void;
+  readonly enabled: () => boolean;
+  readonly clientBoundingRect: () => DOMRect;
   readonly cleanup: () => void;
 }
 
@@ -43,7 +45,11 @@ export function createSortableAnimationController(
 ): SortableAnimationController {
   let enabled = true;
 
-  let layoutPos: Position = elemParentRelativeRect(element);
+  let clientBoundingRect = element.getBoundingClientRect();
+  let layoutPos: Position = clientToRelative(
+    clientBoundingRect,
+    element.parentElement!,
+  );
   let newLayoutPos: Position | undefined;
 
   let startTime: DOMHighResTimeStamp | undefined;
@@ -58,7 +64,11 @@ export function createSortableAnimationController(
       element.style.transform = "";
     },
     measure: () => {
-      const currentLayoutRect = elemParentRelativeRect(element);
+      clientBoundingRect = element.getBoundingClientRect();
+      const currentLayoutRect = clientToRelative(
+        clientBoundingRect,
+        element.parentElement!,
+      );
       if (!posEquals(layoutPos, currentLayoutRect)) {
         newLayoutPos = currentLayoutRect;
       }
@@ -118,6 +128,8 @@ export function createSortableAnimationController(
       startPos = undefined;
       currentPos = undefined;
     },
+    enabled: () => enabled,
+    clientBoundingRect: () => clientBoundingRect,
     cleanup: () => {
       controllers.splice(idx, 1);
     },
