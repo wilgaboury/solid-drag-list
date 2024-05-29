@@ -503,16 +503,11 @@ export function defaultIndexCheck(threshold: number): CheckIndex {
       }
 
       const cover = area(i) / Math.min(area(rect), testArea);
-
-      console.log("intersect", idx, i, area(i), test, rect, cover);
-
       if (cover > threshold && cover > max) {
         max = cover;
         maxIdx = idx;
       }
     }
-
-    console.log(layout);
 
     return maxIdx;
   };
