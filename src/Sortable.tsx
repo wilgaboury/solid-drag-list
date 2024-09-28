@@ -93,7 +93,6 @@ interface DragHandler<T> {
     clickProps: Accessor<ClickProps>,
     autoscroll: Accessor<HTMLElement | undefined>,
   ) => void;
-  readonly endDrag: () => void;
 }
 
 interface DragState<T> {
@@ -396,7 +395,6 @@ function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
 
       updateItemElemPosition();
     },
-    endDrag: () => {},
   };
 }
 

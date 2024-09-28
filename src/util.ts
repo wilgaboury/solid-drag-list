@@ -1,3 +1,5 @@
+import { createTrigger } from "@solid-primitives/trigger";
+
 /**
  * mod but the result is always positive
  */
@@ -82,4 +84,24 @@ export function zip<A, B>(
     ret.push([a[i]!, b[i]!]);
   }
   return ret;
+}
+
+export type SetSignal<T> = {
+  readonly get: () => ReadonlySet<T>;
+  readonly mutate: (apply: (set: Set<T>) => any) => void;
+};
+
+export function createSetSignal<T>(init?: ReadonlyArray<T>): SetSignal<T> {
+  const [track, dirty] = createTrigger();
+  const set = new Set<T>(init);
+  return {
+    get: () => {
+      track();
+      return set as ReadonlySet<T>;
+    },
+    mutate: (apply: (set: Set<T>) => any) => {
+      apply(set);
+      dirty();
+    },
+  };
 }

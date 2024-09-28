@@ -6,6 +6,7 @@ import {
   createContext,
   createEffect,
   createMemo,
+  createSelector,
   createSignal,
   on,
   onCleanup,
@@ -33,7 +34,19 @@ import {
   pageToRelative,
   toSize,
 } from "./geom";
-import { mapZeroOneToZeroInf, normalize } from "./util";
+import {
+  SetSignal,
+  createSetSignal,
+  mapZeroOneToZeroInf,
+  normalize,
+} from "./util";
+
+function handleDrag<T>(
+  initialSortable: SortableRef<T>,
+  group?: SortableGroup<T>,
+) {
+  // TODO: implement
+}
 
 function addGlobalCursorGrabbingStyle(): () => void {
   const cursorStyle = document.createElement("style");
@@ -43,40 +56,35 @@ function addGlobalCursorGrabbingStyle(): () => void {
 }
 
 interface SortableRef<T> {
-  readonly ref: HTMLElement;
+  readonly parent: HTMLElement;
   readonly props: SortableProps<T>;
-  readonly dragHandler: DragHandler<T>;
+  readonly itemRefs: HTMLElement[];
+  readonly setMouseDownItem: (item?: T) => void;
 }
-
 interface DragHandler<T> {
-  readonly move: (state: any) => void;
+  readonly mouseDown: Accessor<T | undefined>;
+  readonly startDrag: (
+    item: T,
+    idx: Accessor<number>,
+    itemElem: HTMLElement,
+    source: SortableRef<T>,
+    sourceElem: HTMLElement,
+    e: MouseEvent,
+    anim: Accessor<SortableAnimationController | undefined>,
+    clickProps: Accessor<ClickProps>,
+    autoscroll: Accessor<HTMLElement | undefined>,
+  ) => void;
+  readonly continueDrag: (
+    item: T,
+    idx: Accessor<number>,
+    itemElem: HTMLElement,
+    source: SortableRef<T>,
+    sourceElem: HTMLElement,
+    anim: Accessor<SortableAnimationController | undefined>,
+    clickProps: Accessor<ClickProps>,
+    autoscroll: Accessor<HTMLElement | undefined>,
+  ) => void;
 }
-
-// interface DragHandler<T> {
-//   readonly mouseDown: Accessor<T | undefined>;
-//   readonly startDrag: (
-//     item: T,
-//     idx: Accessor<number>,
-//     itemElem: HTMLElement,
-//     source: SortableRef<T>,
-//     sourceElem: HTMLElement,
-//     e: MouseEvent,
-//     anim: Accessor<SortableAnimationController | undefined>,
-//     clickProps: Accessor<ClickProps>,
-//     autoscroll: Accessor<HTMLElement | undefined>,
-//   ) => void;
-//   readonly continueDrag: (
-//     item: T,
-//     idx: Accessor<number>,
-//     itemElem: HTMLElement,
-//     source: SortableRef<T>,
-//     sourceElem: HTMLElement,
-//     anim: Accessor<SortableAnimationController | undefined>,
-//     clickProps: Accessor<ClickProps>,
-//     autoscroll: Accessor<HTMLElement | undefined>,
-//   ) => void;
-//   readonly endDrag: () => void;
-// }
 
 interface DragState<T> {
   item: T;
@@ -246,7 +254,7 @@ function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
       for (const sortable of sortables) {
         if (
           sortable === state.source ||
-          !intersects(rect, elemPageRect(sortable.ref)) ||
+          !intersects(rect, elemPageRect(sortable.parent)) ||
           !(sortable.props.insertFilter?.(state.item) ?? true)
         ) {
           continue;
@@ -403,7 +411,6 @@ function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
 
       updateItemElemPosition();
     },
-    endDrag: () => {},
   };
 }
 
@@ -425,7 +432,7 @@ export function createSortableItemContext<T>() {
   return createContext<SortableItemProps<T> | undefined>();
 }
 
-const SortableDirectiveContext = createContext<Set<HTMLElement>>();
+const SortableDirectiveContext = createContext<SetSignal<HTMLElement>>();
 
 /**
  * directive that can be used by adding attribute use:sortableHandle to JSX element
@@ -438,8 +445,8 @@ export function sortableHandle(el: Element, _accessor: () => any) {
     console.error("sortableHandle directive used on invalid element type");
   } else {
     el.style.cursor = "grab";
-    handleRefs.add(el);
-    onCleanup(() => handleRefs.delete(el));
+    handleRefs.mutate((set) => set.add(el));
+    onCleanup(() => handleRefs.mutate((set) => set.delete(el)));
   }
 }
 
@@ -525,23 +532,21 @@ export function Sortable2<T, U extends JSX.Element>(
     readonly children: (props: SortableItemProps<T>) => U;
   },
 ) {
-  let containerChildRef!: HTMLDivElement;
+  let parentRef!: HTMLElement;
   let sortableRef!: SortableRef<T>;
-
-  const dragHandler = createDragHandler();
 
   const animationControllers: SortableAnimationController[] = [];
   const itemRefs: HTMLElement[] = [];
 
-  onMount(() => {
-    if (containerChildRef.parentElement == null) {
-      console.error("sortable must have parent element");
-      return;
-    }
+  const [mouseDownItem, setMouseDownItem] = createSignal<T>();
+  const isMouseDown = createSelector(mouseDownItem, (a, b) => a == b);
 
+  onMount(() => {
     sortableRef = {
-      ref: containerChildRef.parentElement,
-      props: props,
+      parent: parentRef,
+      props,
+      itemRefs,
+      setMouseDownItem,
     };
 
     createEffect(() => {
@@ -553,24 +558,27 @@ export function Sortable2<T, U extends JSX.Element>(
 
   return (
     <>
-      <div ref={containerChildRef} style={{ display: "none" }} />
+      <div
+        ref={(e) => {
+          if (e.parentElement == null) {
+            console.error("sortable must have parent element");
+            return;
+          } else {
+            parentRef = e.parentElement;
+          }
+        }}
+        style={{ display: "none" }}
+      />
       <For each={props.each}>
         {(item, idx) => {
-          const handleRefs = new Set<HTMLElement>();
-
-          const isMouseDown = createMemo(
-            on(
-              dragHandler.mouseDown,
-              (dragging) => dragging != null && item === dragging,
-            ),
-          );
+          const handleRefs = createSetSignal<HTMLElement>();
 
           const resolved = children(() => (
             <SortableDirectiveContext.Provider value={handleRefs}>
               {props.children({
                 item,
                 idx,
-                isMouseDown,
+                isMouseDown: () => isMouseDown(item),
               })}
             </SortableDirectiveContext.Provider>
           ));
@@ -589,13 +597,9 @@ export function Sortable2<T, U extends JSX.Element>(
               },
             ),
           );
-          createEffect(() => (itemRef().style.cursor = "pointer"));
           createEffect(() => (itemRefs[idx()] = itemRef()));
 
           onMount(() => {
-            const sortable = sortableRef;
-            const containerElem = containerChildRef.parentElement!;
-
             let animationController: SortableAnimationController | undefined;
 
             createEffect(() => {
@@ -615,59 +619,28 @@ export function Sortable2<T, U extends JSX.Element>(
               }
             });
 
-            const autoscroll = createMemo(() =>
-              props.autoscroll === true
-                ? containerElem
-                : props.autoscroll === false
-                  ? undefined
-                  : props.autoscroll,
-            );
-
             createEffect(() => {
               const cls = props.mouseDownClass;
-              if (cls != null && isMouseDown()) {
+              if (cls != null && isMouseDown(item)) {
                 itemRef().classList.add(cls);
                 onCleanup(() => itemRef().classList.remove(cls));
               }
             });
+          });
 
-            if (item === dragHandler.mouseDown()) {
-              dragHandler.continueDrag(
-                item,
-                idx,
-                itemElem,
-                sortable,
-                containerElem,
-                () => animationController,
-                clickProps,
-                autoscroll,
-              );
-              animationController?.disable();
-            }
-            const mouseDownListener = (e: MouseEvent) => {
-              if (e.button != 0) {
-                return;
-              }
-              dragHandler.startDrag(
-                item,
-                idx,
-                itemElem,
-                sortable,
-                containerElem,
-                e,
-                () => animationController,
-                clickProps,
-                autoscroll,
-              );
-              animationController?.disable();
-            };
+          const mouseDownListener = () => {
+            handleDrag(sortableRef, props.group);
+          };
 
-            for (const handleElem of handleElems) {
-              handleElem.addEventListener("mousedown", mouseDownListener);
+          createEffect(() => {
+            const hs = handleRefs.get();
+            const listenables = hs.size > 0 ? [...hs] : [itemRef()];
+            for (const listenable of listenables) {
+              listenable.addEventListener("mousedown", mouseDownListener);
             }
             onCleanup(() => {
-              for (const handleElem of handleElems) {
-                handleElem.removeEventListener("mousedown", mouseDownListener);
+              for (const listenable of listenables) {
+                listenable.removeEventListener("mousedown", mouseDownListener);
               }
             });
           });
