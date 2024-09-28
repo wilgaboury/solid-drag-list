@@ -1,4 +1,4 @@
-import { TimingFunction, linear } from "./ease";
+import { TimingFunction, linear } from "./timing";
 import { Position, clientToRelative, posEquals } from "./geom";
 
 interface ControllerHandle {

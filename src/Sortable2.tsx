@@ -18,7 +18,6 @@ import {
   SortableAnimationController,
   createSortableAnimationController,
 } from "./animation";
-import { TimingFunction } from "./ease";
 import {
   Position,
   Rect,
@@ -34,6 +33,7 @@ import {
   pageToRelative,
   toSize,
 } from "./geom";
+import { TimingFunction } from "./timing";
 import {
   SetSignal,
   createSetSignal,
@@ -509,9 +509,9 @@ interface ClickProps {
 }
 
 interface SortableProps<T> extends SortableHooks<T>, ClickProps {
-  readonly group?: SortableGroup<T>;
+  readonly each: ReadonlyArray<T> | undefined | null | false;
 
-  readonly each: ReadonlyArray<T>;
+  readonly group?: SortableGroup<T>;
 
   readonly insertFilter?: (item: T) => boolean;
 
