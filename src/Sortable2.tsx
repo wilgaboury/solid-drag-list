@@ -1,6 +1,5 @@
 import {
   Accessor,
-  Context,
   For,
   JSX,
   children,
@@ -11,7 +10,6 @@ import {
   on,
   onCleanup,
   onMount,
-  untrack,
   useContext,
 } from "solid-js";
 
@@ -30,80 +28,55 @@ import {
   dist,
   elemClientRect,
   elemPageRect,
-  elemParentRelativeRect,
   intersection,
   intersects,
   pageToRelative,
-  toRect,
   toSize,
 } from "./geom";
 import { mapZeroOneToZeroInf, normalize } from "./util";
 
-interface SortableHooks<T> {
-  readonly onClick?: (item: T, idx: number, e: MouseEvent) => void;
-  readonly onDragStart?: (item: T, idx: number) => void;
-  readonly onDragEnd?: (
-    item: T,
-    startIdx: number | undefined,
-    endIdx: number | undefined,
-  ) => void;
-  readonly onMove?: (item: T, fromIdx: number, toIdx: number) => void;
-  readonly onRemove?: (item: T, idx: number) => void;
-  readonly onInsert?: (item: T, idx: number) => void;
-}
-
-function createSortableHooksDispatcher<T>(
-  source: SortableHooks<T>,
-): SortableHooks<T> {
-  return {
-    onClick: (item, idx, e) => source.onClick?.(item, idx, e),
-    onDragStart: (item, idx) => source.onDragStart?.(item, idx),
-    onDragEnd: (item, startIdx, endIdx) =>
-      source.onDragEnd?.(item, startIdx, endIdx),
-    onMove: (item, fromIdx, toIdx) => source.onMove?.(item, fromIdx, toIdx),
-    onRemove: (item, idx) => source.onRemove?.(item, idx),
-    onInsert: (item, idx) => source.onInsert?.(item, idx),
-  };
-}
-
-interface ClickProps {
-  readonly clickDurMs?: number;
-  readonly clickDistPx?: number;
+function addGlobalCursorGrabbingStyle(): () => void {
+  const cursorStyle = document.createElement("style");
+  cursorStyle.innerHTML = "*{cursor: grabbing!important;}";
+  document.head.appendChild(cursorStyle);
+  return () => document.head.removeChild(cursorStyle);
 }
 
 interface SortableRef<T> {
   readonly ref: HTMLElement;
-  readonly checkIndex?: (rect: Rect, index: number) => number | undefined;
-  readonly hooks: SortableHooks<T>;
-  readonly len: Accessor<number>;
-  readonly insertFilter: Accessor<(item: T) => boolean>;
+  readonly props: SortableProps<T>;
+  readonly dragHandler: DragHandler<T>;
 }
 
 interface DragHandler<T> {
-  readonly mouseDown: Accessor<T | undefined>;
-  readonly startDrag: (
-    item: T,
-    idx: Accessor<number>,
-    itemElem: HTMLElement,
-    source: SortableRef<T>,
-    sourceElem: HTMLElement,
-    e: MouseEvent,
-    anim: Accessor<SortableAnimationController | undefined>,
-    clickProps: Accessor<ClickProps>,
-    autoscroll: Accessor<HTMLElement | undefined>,
-  ) => void;
-  readonly continueDrag: (
-    item: T,
-    idx: Accessor<number>,
-    itemElem: HTMLElement,
-    source: SortableRef<T>,
-    sourceElem: HTMLElement,
-    anim: Accessor<SortableAnimationController | undefined>,
-    clickProps: Accessor<ClickProps>,
-    autoscroll: Accessor<HTMLElement | undefined>,
-  ) => void;
-  readonly endDrag: () => void;
+  readonly move: (state: any) => void;
 }
+
+// interface DragHandler<T> {
+//   readonly mouseDown: Accessor<T | undefined>;
+//   readonly startDrag: (
+//     item: T,
+//     idx: Accessor<number>,
+//     itemElem: HTMLElement,
+//     source: SortableRef<T>,
+//     sourceElem: HTMLElement,
+//     e: MouseEvent,
+//     anim: Accessor<SortableAnimationController | undefined>,
+//     clickProps: Accessor<ClickProps>,
+//     autoscroll: Accessor<HTMLElement | undefined>,
+//   ) => void;
+//   readonly continueDrag: (
+//     item: T,
+//     idx: Accessor<number>,
+//     itemElem: HTMLElement,
+//     source: SortableRef<T>,
+//     sourceElem: HTMLElement,
+//     anim: Accessor<SortableAnimationController | undefined>,
+//     clickProps: Accessor<ClickProps>,
+//     autoscroll: Accessor<HTMLElement | undefined>,
+//   ) => void;
+//   readonly endDrag: () => void;
+// }
 
 interface DragState<T> {
   item: T;
@@ -152,8 +125,8 @@ function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
     const state = curState!;
     const elapsed = Date.now() - state.mouseDownTime;
     const tmpClickProps = state.clickProps();
-    const clickDurMs = tmpClickProps.clickDurMs ?? 100;
-    const clickDistPx = tmpClickProps.clickDistPx ?? 8;
+    const clickDurMs = tmpClickProps.clickDurationMs ?? 100;
+    const clickDistPx = tmpClickProps.clickDistancePx ?? 8;
     // TODO: also check and make sure index has not changed
     return elapsed < clickDurMs || state.mouseMoveDist < clickDistPx;
   }
@@ -255,15 +228,15 @@ function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
     const rect = elemPageRect(state.itemElem);
 
     if (intersects(rect, elemPageRect(state.sourceElem))) {
-      const indexCheck = state.source.checkIndex?.(
+      const indexCheck = state.source.props.checkIndex?.(
         pageToRelative(rect, state.sourceElem),
         state.idx(),
       );
       if (
         indexCheck != null &&
-        state.idx() !== Math.min(state.source.len(), indexCheck)
+        state.idx() !== Math.min(state.source.props.each.length, indexCheck)
       ) {
-        state.source.hooks.onMove?.(state.item, state.idx(), indexCheck);
+        state.source.props.onMove?.(state.item, state.idx(), indexCheck);
       }
       return;
     }
@@ -274,15 +247,15 @@ function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
         if (
           sortable === state.source ||
           !intersects(rect, elemPageRect(sortable.ref)) ||
-          !sortable.insertFilter()(state.item)
+          !(sortable.props.insertFilter?.(state.item) ?? true)
         ) {
           continue;
         }
 
         const indexCheck = sortable.checkIndex?.(rect, state.idx());
         if (indexCheck != null) {
-          state.source.hooks.onRemove?.(state.item, state.idx());
-          sortable.hooks.onInsert?.(state.item, indexCheck);
+          state.source.props.onRemove?.(state.item, state.idx());
+          sortable.props.onInsert?.(state.item, indexCheck);
           return;
         }
       }
@@ -297,16 +270,16 @@ function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
 
     try {
       if (e.button == 0 && isClick()) {
-        state.source.hooks.onClick?.(state.item, state.idx(), e);
+        state.source.props.onClick?.(state.item, state.idx(), e);
       } else if (state.startSource == state.source) {
-        state.source.hooks.onDragEnd?.(state.item, state.startIdx, state.idx());
+        state.source.props.onDragEnd?.(state.item, state.startIdx, state.idx());
       } else {
-        state.startSource.hooks.onDragEnd?.(
+        state.startSource.props.onDragEnd?.(
           state.item,
           state.startIdx,
           undefined,
         );
-        state.source.hooks.onDragEnd?.(state.item, undefined, state.idx());
+        state.source.props.onDragEnd?.(state.item, undefined, state.idx());
       }
     } finally {
       const anim = state.anim();
@@ -330,7 +303,7 @@ function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
 
     if (!isClick() && !state.dragStarted) {
       state.dragStarted = true;
-      state.startSource.hooks.onDragStart?.(state.item, state.startIdx);
+      state.startSource.props.onDragStart?.(state.item, state.startIdx);
     }
   };
 
@@ -398,7 +371,7 @@ function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
 
       updateItemElemPosition();
       addListeners();
-      setMouseDown(item as any); // solid setters don't work well with generics
+      setMouseDown(item); // solid setters don't work well with generics
     },
     continueDrag: (
       item,
@@ -440,24 +413,7 @@ interface SortableContextValue<T> {
   readonly dragHandler: DragHandler<T>;
 }
 
-type SortableContext<T> = Context<SortableContextValue<T>>;
-
-export function createSortableContext<T>(): SortableContext<T> {
-  return createContext<SortableContextValue<T>>({} as SortableContextValue<T>);
-}
-
-export function createSortableContextValue<T>(): SortableContextValue<T> {
-  const sortables = new Set<SortableRef<T>>();
-  return {
-    addSortable: (ref: SortableRef<T>) => {
-      sortables.add(ref);
-    },
-    removeSortable: (ref: SortableRef<T>) => {
-      sortables.delete(ref);
-    },
-    dragHandler: createDragHandler(sortables),
-  };
-}
+export type SortableSet<T> = Set<SortableRef<T>>;
 
 interface SortableItemProps<T> {
   readonly item: T;
@@ -465,45 +421,26 @@ interface SortableItemProps<T> {
   readonly isMouseDown: Accessor<boolean>;
 }
 
-type SortableItemContext<T> = Context<SortableItemProps<T>>;
-
-export function createSortableItemContext<T>(): SortableItemContext<T> {
-  return createContext<SortableItemProps<T>>({} as SortableItemProps<T>);
+export function createSortableItemContext<T>() {
+  return createContext<SortableItemProps<T> | undefined>();
 }
 
-interface SortableDirectiveContextValue {
-  readonly setHandle?: (el: HTMLElement) => void;
-}
+const SortableDirectiveContext = createContext<Set<HTMLElement>>();
 
-const SortableDirectiveContext = createContext<SortableDirectiveContextValue>(
-  {},
-);
-
+/**
+ * directive that can be used by adding attribute use:sortableHandle to JSX element
+ */
 export function sortableHandle(el: Element, _accessor: () => any) {
-  const directives = useContext(SortableDirectiveContext);
-  if (el instanceof HTMLElement && directives.setHandle) {
-    directives.setHandle(el);
+  const handleRefs = useContext(SortableDirectiveContext);
+  if (handleRefs == null) {
+    console.error("sortable handle context could not be found");
+  } else if (!(el instanceof HTMLElement)) {
+    console.error("sortableHandle directive used on invalid element type");
+  } else {
+    el.style.cursor = "grab";
+    handleRefs.add(el);
+    onCleanup(() => handleRefs.delete(el));
   }
-}
-
-interface SortableProps<T, U extends JSX.Element>
-  extends SortableHooks<T>,
-    ClickProps {
-  readonly context?: SortableContext<T>; // cannot be changed dynamically
-
-  readonly each: ReadonlyArray<T>;
-  readonly children: (props: SortableItemProps<T>) => U;
-
-  readonly insertFilter?: (item: T) => boolean;
-
-  readonly autoscroll?: boolean | HTMLElement;
-  readonly autoscrollBorderWidth?: number;
-
-  readonly animated?: boolean;
-  readonly timingFunction?: TimingFunction;
-  readonly animationDurationMs?: number;
-
-  readonly checkIndex?: CheckIndex;
 }
 
 export type CheckIndex = (
@@ -514,8 +451,6 @@ export type CheckIndex = (
 
 export function defaultIndexCheck(threshold: number): CheckIndex {
   return (layout, test, index) => {
-    // console.log(test, layout, index);
-
     const testArea = area(test);
     let max = 0;
     let maxIdx = undefined;
@@ -527,14 +462,10 @@ export function defaultIndexCheck(threshold: number): CheckIndex {
 
       const i = intersection(rect, test);
 
-      // console.log(idx, i, rect, test);
-
       if (i == null) {
         continue;
       }
       const cover = area(i) / Math.min(area(rect), testArea);
-
-      // console.log("intersect", idx, cover);
 
       if (cover > threshold && cover > max) {
         max = cover;
@@ -545,68 +476,78 @@ export function defaultIndexCheck(threshold: number): CheckIndex {
     return maxIdx;
   };
 }
+
+export type SortableGroup<T> = Set<SortableRef<T>>;
+
+export function createSortableGroup<T>(): SortableGroup<T> {
+  return new Set();
+}
+
+interface SortableHooks<T> {
+  readonly onClick?: (item: T, idx: number, e: MouseEvent) => void;
+  readonly onDragStart?: (item: T, idx: number) => void;
+  readonly onDragEnd?: (
+    item: T,
+    startIdx: number | undefined,
+    endIdx: number | undefined,
+  ) => void;
+  readonly onMove?: (item: T, fromIdx: number, toIdx: number) => void;
+  readonly onRemove?: (item: T, idx: number) => void;
+  readonly onInsert?: (item: T, idx: number) => void;
+}
+
+interface ClickProps {
+  readonly clickDurationMs?: number;
+  readonly clickDistancePx?: number;
+}
+
+interface SortableProps<T> extends SortableHooks<T>, ClickProps {
+  readonly group?: SortableGroup<T>;
+
+  readonly each: ReadonlyArray<T>;
+
+  readonly insertFilter?: (item: T) => boolean;
+
+  readonly autoscroll?: boolean | HTMLElement;
+  readonly autoscrollBorderWidth?: number;
+
+  readonly animated?: boolean;
+  readonly timingFunction?: TimingFunction;
+  readonly animationDurationMs?: number;
+
+  readonly checkIndex?: CheckIndex;
+
+  readonly mouseDownClass?: string;
+}
+
 export function Sortable2<T, U extends JSX.Element>(
-  props: SortableProps<T, U>,
+  props: SortableProps<T> & {
+    readonly children: (props: SortableItemProps<T>) => U;
+  },
 ) {
-  const sortableContext = props.context && useContext(props.context);
+  let containerChildRef!: HTMLDivElement;
+  let sortableRef!: SortableRef<T>;
 
-  let sortableRef: SortableRef<T> | undefined;
-  let containerChildRef: HTMLDivElement | undefined;
+  const dragHandler = createDragHandler();
 
-  const dragHandler: DragHandler<T> =
-    sortableContext != null ? sortableContext.dragHandler : createDragHandler();
-
-  const controllers: (SortableAnimationController | undefined)[] = [];
-  let currentLayout: () => (Rect | undefined)[];
-
-  createEffect(
-    on([() => props.each, () => props.animated], () =>
-      queueMicrotask(() => {
-        if (props.animated) {
-          currentLayout = () =>
-            controllers
-              .filter((c) => c != null)
-              .map((c) =>
-                c!.enabled()
-                  ? clientToRelative(
-                      toRect(c!.clientBoundingRect()),
-                      containerChildRef!.parentElement!,
-                    )
-                  : undefined,
-              );
-        } else {
-          const ret: Rect[] = [];
-          let cur = containerChildRef?.nextElementSibling;
-          while (cur != null) {
-            ret.push(elemParentRelativeRect(cur as HTMLElement)); // TODO: maybe filter out non html elements instead of casting
-            cur = cur.nextElementSibling;
-          }
-          currentLayout = () => ret;
-        }
-      }),
-    ),
-  );
+  const animationControllers: SortableAnimationController[] = [];
+  const itemRefs: HTMLElement[] = [];
 
   onMount(() => {
-    sortableRef = {
-      ref: containerChildRef!.parentElement!,
-      checkIndex: (rect, index) =>
-        (props.checkIndex ?? defaultIndexCheck(0.5))(
-          currentLayout(),
-          rect,
-          index,
-        ),
-      hooks: createSortableHooksDispatcher(props),
-      len: () => props.each.length,
-      insertFilter: () => props.insertFilter ?? (() => true),
-    };
-    if (sortableContext != null) {
-      sortableContext.addSortable(sortableRef);
+    if (containerChildRef.parentElement == null) {
+      console.error("sortable must have parent element");
+      return;
     }
-    onCleanup(() => {
-      if (sortableContext != null) {
-        sortableContext.removeSortable(sortableRef!);
-      }
+
+    sortableRef = {
+      ref: containerChildRef.parentElement,
+      props: props,
+    };
+
+    createEffect(() => {
+      const group = props.group;
+      group?.add(sortableRef);
+      onCleanup(() => group?.delete(sortableRef));
     });
   });
 
@@ -615,8 +556,7 @@ export function Sortable2<T, U extends JSX.Element>(
       <div ref={containerChildRef} style={{ display: "none" }} />
       <For each={props.each}>
         {(item, idx) => {
-          let itemRef: HTMLElement | undefined;
-          const handleRefs: HTMLElement[] = [];
+          const handleRefs = new Set<HTMLElement>();
 
           const isMouseDown = createMemo(
             on(
@@ -626,9 +566,7 @@ export function Sortable2<T, U extends JSX.Element>(
           );
 
           const resolved = children(() => (
-            <SortableDirectiveContext.Provider
-              value={{ setHandle: (el) => handleRefs.push(el) }}
-            >
+            <SortableDirectiveContext.Provider value={handleRefs}>
               {props.children({
                 item,
                 idx,
@@ -637,70 +575,45 @@ export function Sortable2<T, U extends JSX.Element>(
             </SortableDirectiveContext.Provider>
           ));
 
-          const itemElemRx = createMemo(
+          const itemRef = createMemo(
             on(
               () => resolved.toArray(),
               (arr) => {
-                if (itemRef != null) {
-                  return itemRef;
+                if (arr[0] instanceof HTMLElement) {
+                  return arr[0];
                 } else {
-                  if (arr.length > 1) {
-                    console.warn(
-                      "sortable child has more than one top-level html element, this may cause issues",
-                    );
-                  }
-                  if (arr[0] instanceof HTMLElement) {
-                    return arr[0];
-                  }
+                  throw Error(
+                    `sortable child at index ${idx()} did not resolve to a DOM node`,
+                  );
                 }
               },
             ),
           );
-
-          const handleElemsRx = createMemo(on(resolved, () => handleRefs));
+          createEffect(() => (itemRef().style.cursor = "pointer"));
+          createEffect(() => (itemRefs[idx()] = itemRef()));
 
           onMount(() => {
-            const sortable = sortableRef!;
-            const containerElem = containerChildRef!.parentElement!;
-
-            const itemElemTest = itemElemRx();
-            if (itemElemTest == null) {
-              console.error(
-                "sortable cannot resolve refence to child html element",
-              );
-              return;
-            }
-
-            const itemElem = itemElemTest;
-            const handleElemsTest = handleElemsRx();
-            const handleElems =
-              handleElemsTest.length > 0 ? handleElemsTest : [itemElem];
+            const sortable = sortableRef;
+            const containerElem = containerChildRef.parentElement!;
 
             let animationController: SortableAnimationController | undefined;
 
             createEffect(() => {
               if (props.animated ?? false) {
-                animationController = createSortableAnimationController(
-                  itemElem,
+                const controller = createSortableAnimationController(
+                  itemRef(),
                   () => props.timingFunction,
                   () => props.animationDurationMs,
                 );
-                onCleanup(animationController.cleanup);
+                onCleanup(controller.cleanup);
+                animationController = controller;
 
-                createEffect(
-                  on(idx, (i) => {
-                    onCleanup(() => (controllers[i] = undefined));
-                    controllers[i] = animationController;
-                  }),
-                );
+                createEffect(() => {
+                  const i = idx();
+                  animationControllers[i] = controller;
+                });
               }
             });
-
-            function setHandleCursor(cursor: string) {
-              for (const handleElem of handleElems) {
-                handleElem.style.cursor = cursor;
-              }
-            }
 
             const autoscroll = createMemo(() =>
               props.autoscroll === true
@@ -710,34 +623,12 @@ export function Sortable2<T, U extends JSX.Element>(
                   : props.autoscroll,
             );
 
-            function setDefaultCursor() {
-              if (props.onClick) {
-                setHandleCursor("pointer");
-              } else {
-                setHandleCursor("grab");
-              }
-            }
-
             createEffect(() => {
-              if (isMouseDown()) {
-                itemElem.classList.add("sortable-mousedown");
-
-                document.body.style.cursor = "grabbing";
-                setHandleCursor("grabbing");
+              const cls = props.mouseDownClass;
+              if (cls != null && isMouseDown()) {
+                itemRef().classList.add(cls);
+                onCleanup(() => itemRef().classList.remove(cls));
               }
-              onCleanup(() => {
-                itemElem.classList.remove("sortable-mousedown");
-
-                document.body.style.cursor = "unset";
-                untrack(setDefaultCursor);
-              });
-            });
-
-            createEffect(setDefaultCursor);
-
-            const clickProps = () => ({
-              clickDurMs: props.clickDurMs,
-              clickDistPx: props.clickDistPx,
             });
 
             if (item === dragHandler.mouseDown()) {
