@@ -44,6 +44,8 @@ import {
 function handleDrag<T>(
   initialSortable: SortableRef<T>,
   group?: SortableGroup<T>,
+  item: T,
+  idx: Accessor<number>,
 ) {
   // TODO: implement
 }
@@ -629,7 +631,7 @@ export function Sortable2<T, U extends JSX.Element>(
           });
 
           const mouseDownListener = () => {
-            handleDrag(sortableRef, props.group);
+            handleDrag(sortableRef, props.group, item, idx);
           };
 
           createEffect(() => {
