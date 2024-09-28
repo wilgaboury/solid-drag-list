@@ -1,11 +1,11 @@
 import { Component, For, createSignal, onCleanup, onMount } from "solid-js";
 
 import { createSortableAnimationController } from "../src/animation";
-import { easeInOutSine, easeInSine, easeOutSine } from "../src/ease";
+import { easeInOutQuad, easeOutQuad, linear } from "../src/ease";
 import { Sortable2 } from "../src/Sortable2";
 import { move } from "../src";
 
-function getRandomColor() {
+export function getRandomColor() {
   var letters = "0123456789ABCDEF";
   var color = "#";
   for (var i = 0; i < 6; i++) {
@@ -14,7 +14,7 @@ function getRandomColor() {
   return color;
 }
 
-export const FlexPage: Component = () => {
+export const GridPage: Component = () => {
   const [elements, setElements] = createSignal<ReadonlyArray<number>>(
     Array.from(Array(20).keys()),
   );
@@ -57,57 +57,28 @@ export const FlexPage: Component = () => {
         Remove
       </button>
       <button onClick={() => setLargeGap((v) => !v)}>Gap</button>
+
       <div
         style={{
-          display: "flex",
-          "flex-wrap": "wrap",
-          padding: "50px",
-          gap: largeGap() ? "50px" : "25px",
-          "user-select": "none",
+          padding: "20px",
+          display: "grid",
+          gap: "20px",
+          "grid-template-columns": "repeat(auto-fill, 150px)",
+          "justify-content": "center",
         }}
       >
-        {/* <For each={elements()}>
-          {(element, idx) => {
-            let childRef: HTMLDivElement | undefined;
-
-            onMount(() => {
-              const controller = createSortableAnimationController(
-                childRef!,
-                () => easeInOutSine,
-                () => 250,
-              );
-              onCleanup(controller.cleanup);
-            });
-
-            return (
-              <div
-                id={`id${element}`}
-                ref={childRef}
-                style={{
-                  width: "100px",
-                  height: "100px",
-                  "background-color": getRandomColor(),
-                  color: "black",
-                }}
-              >
-                {element}
-              </div>
-            );
-          }}
-        </For> */}
         <Sortable2
           each={elements()}
           onMove={(_item, from, to) => setElements((e) => move(e, from, to))}
           animated
-          easeDurationMs={250}
-          easeFunction={easeOutSine}
+          animationDurationMs={250}
+          timingFunction={easeOutQuad}
         >
           {({ item, isMouseDown }) => {
             const color = getRandomColor();
             return (
               <div
                 style={{
-                  width: "100px",
                   height: "100px",
                   "background-color": color,
                   color: "black",

@@ -1,7 +1,7 @@
 import { A, Route, Router } from "@solidjs/router";
 import { LayoutExplorer } from "./LayoutExplorer";
 import { TransformMeasureTest } from "./TransformMeasureTest";
-import { FlexPage } from "./Flex";
+import { GridPage } from "./Grid";
 
 export function Pages() {
   return (
@@ -17,14 +17,14 @@ export function Pages() {
               <A href="/transform-measure-test">Transform Measure Test</A>
             </li>
             <li>
-              <A href="/flex-test">Flex Test</A>
+              <A href="/grid-test">Grid Test</A>
             </li>
           </ul>
         )}
       />
       <Route path="/layout-explorer" component={LayoutExplorer} />
       <Route path="/transform-measure-test" component={TransformMeasureTest} />
-      <Route path="/flex-test" component={FlexPage} />
+      <Route path="/grid-test" component={GridPage} />
     </Router>
   );
 }

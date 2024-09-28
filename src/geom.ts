@@ -36,6 +36,13 @@ export function intersection(rect1: Rect, rect2: Rect): Rect | undefined {
   };
 }
 
+console.log(
+  intersection(
+    { x: 104, y: 0, width: 104, height: 104 },
+    { x: 24, y: -5, width: 104, height: 104 },
+  ),
+);
+
 export function clientToPage<T extends Position>(pos: T): T {
   return {
     ...pos,

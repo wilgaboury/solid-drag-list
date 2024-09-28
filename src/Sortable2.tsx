@@ -19,7 +19,7 @@ import {
   SortableAnimationController,
   createSortableAnimationController,
 } from "./animation";
-import { EaseFunction, easeInOutSine } from "./ease";
+import { TimingFunction } from "./ease";
 import {
   Position,
   Rect,
@@ -33,6 +33,8 @@ import {
   elemParentRelativeRect,
   intersection,
   intersects,
+  pageToRelative,
+  toRect,
   toSize,
 } from "./geom";
 import { mapZeroOneToZeroInf, normalize } from "./util";
@@ -86,6 +88,7 @@ interface DragHandler<T> {
     source: SortableRef<T>,
     sourceElem: HTMLElement,
     e: MouseEvent,
+    anim: Accessor<SortableAnimationController | undefined>,
     clickProps: Accessor<ClickProps>,
     autoscroll: Accessor<HTMLElement | undefined>,
   ) => void;
@@ -95,6 +98,7 @@ interface DragHandler<T> {
     itemElem: HTMLElement,
     source: SortableRef<T>,
     sourceElem: HTMLElement,
+    anim: Accessor<SortableAnimationController | undefined>,
     clickProps: Accessor<ClickProps>,
     autoscroll: Accessor<HTMLElement | undefined>,
   ) => void;
@@ -110,6 +114,10 @@ interface DragState<T> {
   sourceElem: HTMLElement;
   startSource: SortableRef<T>;
   startSourceElem: HTMLElement;
+
+  anim: Accessor<SortableAnimationController | undefined>;
+  x: number | undefined;
+  y: number | undefined;
 
   mouseDownTime: number;
   mouseMoveDist: number;
@@ -164,6 +172,9 @@ function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
     const pos = clientToRelative(state.mouseMove, state.itemElem);
     const x = pos.x - state.mouseDownPos.x;
     const y = pos.y - state.mouseDownPos.y;
+    const pos2 = clientToRelative(state.mouseMove, state.sourceElem);
+    state.x = pos2.x - state.mouseDownPos.x;
+    state.y = pos2.y - state.mouseDownPos.y;
     state.itemElem.style.transform = `translate(${x}px, ${y}px)`;
   }
 
@@ -244,7 +255,10 @@ function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
     const rect = elemPageRect(state.itemElem);
 
     if (intersects(rect, elemPageRect(state.sourceElem))) {
-      const indexCheck = state.source.checkIndex?.(rect, state.idx());
+      const indexCheck = state.source.checkIndex?.(
+        pageToRelative(rect, state.sourceElem),
+        state.idx(),
+      );
       if (
         indexCheck != null &&
         state.idx() !== Math.min(state.source.len(), indexCheck)
@@ -295,7 +309,12 @@ function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
         state.source.hooks.onDragEnd?.(state.item, undefined, state.idx());
       }
     } finally {
-      state.itemElem.style.transform = "";
+      const anim = state.anim();
+      if (anim != null) {
+        state.anim()?.enable({ x: state.x!, y: state.y! });
+      } else {
+        state.itemElem.style.transform = "";
+      }
       setMouseDown(undefined);
     }
   };
@@ -342,6 +361,7 @@ function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
       source,
       sourceElem,
       e,
+      anim,
       clickProps,
       autoscroll,
     ) => {
@@ -353,6 +373,10 @@ function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
         mouseMove,
         mouseMovePrev: mouseMove,
         mouseDownPos: clientToRelative(mouseMove, itemElem),
+
+        anim,
+        x: undefined,
+        y: undefined,
 
         item,
         itemElem,
@@ -382,6 +406,7 @@ function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
       itemElem,
       source,
       sourceElem,
+      anim,
       clickProps,
       autoscroll,
     ) => {
@@ -393,6 +418,7 @@ function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
       state.sourceElem = sourceElem;
       state.clickProps = clickProps;
       state.autoscroll = autoscroll;
+      state.anim = anim;
 
       const newSize = toSize(elemClientRect(itemElem));
       state.mouseDownPos = {
@@ -474,35 +500,42 @@ interface SortableProps<T, U extends JSX.Element>
   readonly autoscrollBorderWidth?: number;
 
   readonly animated?: boolean;
-  readonly easeFunction?: EaseFunction;
-  readonly easeDurationMs?: number;
+  readonly timingFunction?: TimingFunction;
+  readonly animationDurationMs?: number;
 
   readonly checkIndex?: CheckIndex;
 }
 
 export type CheckIndex = (
-  layout: ReadonlyArray<Rect>,
+  layout: ReadonlyArray<Rect | undefined>,
   test: Rect,
   index: number,
 ) => number | undefined;
 
 export function defaultIndexCheck(threshold: number): CheckIndex {
   return (layout, test, index) => {
+    // console.log(test, layout, index);
+
     const testArea = area(test);
     let max = 0;
     let maxIdx = undefined;
 
     for (const [idx, rect] of layout.entries()) {
-      if (index == idx) {
+      if (index == idx || rect == null) {
         continue;
       }
 
       const i = intersection(rect, test);
+
+      // console.log(idx, i, rect, test);
+
       if (i == null) {
         continue;
       }
-
       const cover = area(i) / Math.min(area(rect), testArea);
+
+      // console.log("intersect", idx, cover);
+
       if (cover > threshold && cover > max) {
         max = cover;
         maxIdx = idx;
@@ -524,7 +557,7 @@ export function Sortable2<T, U extends JSX.Element>(
     sortableContext != null ? sortableContext.dragHandler : createDragHandler();
 
   const controllers: (SortableAnimationController | undefined)[] = [];
-  let currentLayout: () => Rect[];
+  let currentLayout: () => (Rect | undefined)[];
 
   createEffect(
     on([() => props.each, () => props.animated], () =>
@@ -532,8 +565,15 @@ export function Sortable2<T, U extends JSX.Element>(
         if (props.animated) {
           currentLayout = () =>
             controllers
-              .filter((c) => c != null && c.enabled())
-              .map((c) => c!.clientBoundingRect());
+              .filter((c) => c != null)
+              .map((c) =>
+                c!.enabled()
+                  ? clientToRelative(
+                      toRect(c!.clientBoundingRect()),
+                      containerChildRef!.parentElement!,
+                    )
+                  : undefined,
+              );
         } else {
           const ret: Rect[] = [];
           let cur = containerChildRef?.nextElementSibling;
@@ -642,15 +682,15 @@ export function Sortable2<T, U extends JSX.Element>(
               if (props.animated ?? false) {
                 animationController = createSortableAnimationController(
                   itemElem,
-                  () => props.easeFunction ?? easeInOutSine,
-                  () => props.easeDurationMs ?? 200,
+                  () => props.timingFunction,
+                  () => props.animationDurationMs,
                 );
                 onCleanup(animationController.cleanup);
 
                 createEffect(
                   on(idx, (i) => {
-                    controllers[i] = animationController;
                     onCleanup(() => (controllers[i] = undefined));
+                    controllers[i] = animationController;
                   }),
                 );
               }
@@ -707,6 +747,7 @@ export function Sortable2<T, U extends JSX.Element>(
                 itemElem,
                 sortable,
                 containerElem,
+                () => animationController,
                 clickProps,
                 autoscroll,
               );
@@ -723,6 +764,7 @@ export function Sortable2<T, U extends JSX.Element>(
                 sortable,
                 containerElem,
                 e,
+                () => animationController,
                 clickProps,
                 autoscroll,
               );

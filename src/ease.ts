@@ -1,6 +1,10 @@
-export type EaseFunction = (value: number) => number;
+export type TimingFunction = (value: number) => number;
 
 // code copied from: https://gizma.com/easing/
+
+export function linear(x: number): number {
+  return x;
+}
 
 export function easeInSine(x: number): number {
   return 1 - Math.cos((x * Math.PI) / 2);

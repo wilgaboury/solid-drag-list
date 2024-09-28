@@ -1,4 +1,4 @@
-import { EaseFunction } from "./ease";
+import { TimingFunction, linear } from "./ease";
 import { Position, clientToRelative, posEquals } from "./geom";
 
 interface ControllerHandle {
@@ -38,11 +38,18 @@ export interface SortableAnimationController {
   readonly cleanup: () => void;
 }
 
+const defaultTimingFunc = linear;
+const defaultAnimDurMs = 200;
+
 export function createSortableAnimationController(
   element: HTMLElement,
-  easeFunc: () => EaseFunction,
-  easeTime: () => number,
+  timingFuncArg?: () => TimingFunction | undefined,
+  animDurMsArg?: () => number | undefined,
 ): SortableAnimationController {
+  element.style.willChange = "transform";
+  const timingFunc = () => timingFuncArg?.() ?? defaultTimingFunc;
+  const animDurMs = () => animDurMsArg?.() ?? defaultAnimDurMs;
+
   let enabled = true;
 
   let clientBoundingRect = element.getBoundingClientRect();
@@ -61,9 +68,19 @@ export function createSortableAnimationController(
 
   const handle: ControllerHandle = {
     clear: () => {
-      element.style.transform = "";
+      if (!enabled) {
+        return;
+      }
+
+      if (element.style.transform !== "") {
+        element.style.transform = "";
+      }
     },
     measure: () => {
+      if (!enabled) {
+        return;
+      }
+
       clientBoundingRect = element.getBoundingClientRect();
       const currentLayoutRect = clientToRelative(
         clientBoundingRect,
@@ -91,13 +108,13 @@ export function createSortableAnimationController(
       }
 
       const elapsed = time - startTime!;
-      if (elapsed > easeTime()) {
+      if (elapsed > animDurMs()) {
         element.style.transform = "";
         startTime = undefined;
         startPos = undefined;
         currentPos = undefined;
       } else {
-        const frac = easeFunc()(elapsed / easeTime());
+        const frac = timingFunc()(elapsed / animDurMs());
         currentPos = {
           x: startPos!.x + frac * (layoutPos.x - startPos!.x),
           y: startPos!.y + frac * (layoutPos.y - startPos!.y),

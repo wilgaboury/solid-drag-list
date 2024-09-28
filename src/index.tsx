@@ -14,8 +14,6 @@ export const Hello: Component<{ to?: string }> = (props) => {
 
   // Console calls will be removed in production if `dropConsole` is enabled
 
-  console.log("Hello World!");
-
   createComputed(() => {
     if (typeof props.to === "string") setHello(props.to);
   });
