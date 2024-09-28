@@ -34,7 +34,7 @@ export interface SortableAnimationController {
   readonly enable: (start?: Position) => void;
   readonly disable: () => void;
   readonly enabled: () => boolean;
-  readonly clientBoundingRect: () => DOMRect;
+  readonly layoutClientBoundingRect: () => DOMRect;
   readonly cleanup: () => void;
 }
 
@@ -46,24 +46,23 @@ export function createSortableAnimationController(
   timingFuncArg?: () => TimingFunction | undefined,
   animDurMsArg?: () => number | undefined,
 ): SortableAnimationController {
-  element.style.willChange = "transform";
   const timingFunc = () => timingFuncArg?.() ?? defaultTimingFunc;
   const animDurMs = () => animDurMsArg?.() ?? defaultAnimDurMs;
 
   let enabled = true;
 
-  let clientBoundingRect = element.getBoundingClientRect();
-  let layoutPos: Position = clientToRelative(
-    clientBoundingRect,
+  let layoutClientBoundingRect = element.getBoundingClientRect();
+  let layoutRelativePos: Position = clientToRelative(
+    layoutClientBoundingRect,
     element.parentElement!,
   );
-  let newLayoutPos: Position | undefined;
+  let newLayoutRelativePos: Position | undefined;
 
   let startTime: DOMHighResTimeStamp | undefined;
   let startPos: Position | undefined;
   let currentPos: Position | undefined;
 
-  const startAnimating = () => newLayoutPos != null;
+  const startAnimating = () => newLayoutRelativePos != null;
   const animating = () => startTime != null;
 
   const handle: ControllerHandle = {
@@ -72,22 +71,20 @@ export function createSortableAnimationController(
         return;
       }
 
-      if (element.style.transform !== "") {
-        element.style.transform = "";
-      }
+      element.style.transform = "";
     },
     measure: () => {
       if (!enabled) {
         return;
       }
 
-      clientBoundingRect = element.getBoundingClientRect();
-      const currentLayoutRect = clientToRelative(
-        clientBoundingRect,
+      layoutClientBoundingRect = element.getBoundingClientRect();
+      const currentLayoutRelativePos = clientToRelative(
+        layoutClientBoundingRect,
         element.parentElement!,
       );
-      if (!posEquals(layoutPos, currentLayoutRect)) {
-        newLayoutPos = currentLayoutRect;
+      if (!posEquals(layoutRelativePos, currentLayoutRelativePos)) {
+        newLayoutRelativePos = currentLayoutRelativePos;
       }
     },
     animate: (time: DOMHighResTimeStamp) => {
@@ -95,16 +92,16 @@ export function createSortableAnimationController(
         return;
       }
 
-      if (newLayoutPos != null) {
+      if (newLayoutRelativePos != null) {
         if (startTime == null) {
-          startPos = layoutPos;
-          currentPos = layoutPos;
+          startPos = layoutRelativePos;
+          currentPos = layoutRelativePos;
         } else {
           startPos = currentPos;
         }
         startTime = time;
-        layoutPos = newLayoutPos;
-        newLayoutPos = undefined;
+        layoutRelativePos = newLayoutRelativePos;
+        newLayoutRelativePos = undefined;
       }
 
       const elapsed = time - startTime!;
@@ -116,11 +113,11 @@ export function createSortableAnimationController(
       } else {
         const frac = timingFunc()(elapsed / animDurMs());
         currentPos = {
-          x: startPos!.x + frac * (layoutPos.x - startPos!.x),
-          y: startPos!.y + frac * (layoutPos.y - startPos!.y),
+          x: startPos!.x + frac * (layoutRelativePos.x - startPos!.x),
+          y: startPos!.y + frac * (layoutRelativePos.y - startPos!.y),
         };
-        const deltaX = currentPos.x - layoutPos.x;
-        const deltaY = currentPos.y - layoutPos.y;
+        const deltaX = currentPos.x - layoutRelativePos.x;
+        const deltaY = currentPos.y - layoutRelativePos.y;
         element.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
       }
     },
@@ -136,7 +133,7 @@ export function createSortableAnimationController(
     enable: (start) => {
       enabled = true;
       if (start != null) {
-        layoutPos = start;
+        layoutRelativePos = start;
       }
     },
     disable: () => {
@@ -146,7 +143,7 @@ export function createSortableAnimationController(
       currentPos = undefined;
     },
     enabled: () => enabled,
-    clientBoundingRect: () => clientBoundingRect,
+    layoutClientBoundingRect: () => layoutClientBoundingRect,
     cleanup: () => {
       controllers.splice(idx, 1);
     },
