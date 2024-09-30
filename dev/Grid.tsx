@@ -1,7 +1,6 @@
 import { Component, For, createSignal, onCleanup, onMount } from "solid-js";
 
-import { createSortableAnimationController } from "../src/animation";
-import { easeInOutQuad, easeOutQuad, linear } from "../src/timing";
+import { easeOutQuad } from "../src/timing";
 import { Sortable2 } from "../src/Sortable2";
 import { move } from "../src";
 

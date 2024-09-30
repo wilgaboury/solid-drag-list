@@ -62,22 +62,18 @@ function handleDrag<T>(
   dragState: DragState<T>,
   item: T,
 ) {
+  const cleanupGlobalCursorGrabbingStyle = addGlobalCursorGrabbingStyle();
+
   const relativeMouseDownPercentPos =
     calculateRelativePercentPos(initialMouseEvent);
-  console.log(relativeMouseDownPercentPos);
+
+  let relativePosition: Position | undefined;
 
   createEffect(() => {
     const itemDraggingState = dragState.draggingItemState();
     if (itemDraggingState == null) {
       return;
     }
-
-    const itemRef = itemDraggingState.ref();
-    if (itemRef == null) {
-      return;
-    }
-
-    let relativePosition: Position | undefined;
 
     if (itemDraggingState.animationController != null) {
       const controller = itemDraggingState.animationController;
@@ -86,42 +82,47 @@ function handleDrag<T>(
         controller.enable(relativePosition);
       });
     }
-
-    const mouseMoveListener = (e: MouseEvent) => {
-      const mousePosition = clientToRelative(
-        { x: e.clientX, y: e.clientY },
-        sortable.parent,
-      );
-
-      itemRef.style.transform = "";
-
-      const layoutRect = elemParentRelativeRect(itemRef);
-
-      relativePosition = {
-        x: mousePosition.x - relativeMouseDownPercentPos.x * layoutRect.width,
-        y: mousePosition.y - relativeMouseDownPercentPos.y * layoutRect.height,
-      };
-
-      const layoutRelativePosition = {
-        x: relativePosition.x - layoutRect.x,
-        y: relativePosition.y - layoutRect.y,
-      };
-
-      itemRef.style.transform = `translate(${layoutRelativePosition.x}px, ${layoutRelativePosition.y}px)`;
-    };
-
-    const dragEndListener = () => {
-      dragState.setDragging(undefined);
-      dragState.setDraggingItemState(undefined);
-    };
-
-    document.addEventListener("mousemove", mouseMoveListener);
-    document.addEventListener("mouseup", dragEndListener);
-    onCleanup(() => {
-      document.removeEventListener("mousemove", mouseMoveListener);
-      document.removeEventListener("mouseup", dragEndListener);
-    });
   });
+
+  const mouseMoveListener = (e: MouseEvent) => {
+    const itemRef = dragState.draggingItemState()?.ref();
+
+    if (itemRef == null) {
+      return;
+    }
+
+    const mousePosition = clientToRelative(
+      { x: e.clientX, y: e.clientY },
+      sortable.parent,
+    );
+
+    itemRef.style.transform = "";
+
+    const layoutRect = elemParentRelativeRect(itemRef);
+
+    relativePosition = {
+      x: mousePosition.x - relativeMouseDownPercentPos.x * layoutRect.width,
+      y: mousePosition.y - relativeMouseDownPercentPos.y * layoutRect.height,
+    };
+
+    const layoutRelativePosition = {
+      x: relativePosition.x - layoutRect.x,
+      y: relativePosition.y - layoutRect.y,
+    };
+
+    itemRef.style.transform = `translate(${layoutRelativePosition.x}px, ${layoutRelativePosition.y}px)`;
+  };
+
+  const dragEnd = () => {
+    dragState.setDragging(undefined);
+    dragState.setDraggingItemState(undefined);
+    document.removeEventListener("mousemove", mouseMoveListener);
+    document.removeEventListener("mouseup", dragEnd);
+    cleanupGlobalCursorGrabbingStyle();
+  };
+
+  document.addEventListener("mousemove", mouseMoveListener);
+  document.addEventListener("mouseup", dragEnd);
 }
 
 function addGlobalCursorGrabbingStyle(): () => void {
@@ -753,6 +754,7 @@ export function Sortable2<T, U extends JSX.Element>(
           });
 
           const mouseDownListener = (e: MouseEvent) => {
+            dragState().setDragging(item);
             dragState().setDraggingItemState(state);
             runWithOwner(owner, () =>
               handleDrag(
