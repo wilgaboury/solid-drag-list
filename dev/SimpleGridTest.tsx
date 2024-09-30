@@ -1,6 +1,5 @@
 import { createSortableAnimationController } from "../src/animation";
 import { getRandomColor } from "./Grid";
-import { linear } from "../src/ease";
 import { onMount } from "solid-js";
 
 export function SimpleGridTest() {

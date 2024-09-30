@@ -1,5 +1,5 @@
-import { TimingFunction, linear } from "./timing";
 import { Position, clientToRelative, posEquals } from "./geom";
+import { TimingFunction, linear } from "./timing";
 
 interface ControllerHandle {
   readonly clear: () => void;

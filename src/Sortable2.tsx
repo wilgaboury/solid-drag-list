@@ -2,15 +2,19 @@ import {
   Accessor,
   For,
   JSX,
+  Setter,
   children,
   createContext,
   createEffect,
   createMemo,
   createSelector,
   createSignal,
+  getOwner,
   on,
   onCleanup,
   onMount,
+  runWithOwner,
+  untrack,
   useContext,
 } from "solid-js";
 
@@ -28,9 +32,9 @@ import {
   dist,
   elemClientRect,
   elemPageRect,
+  elemParentRelativeRect,
   intersection,
   intersects,
-  pageToRelative,
   toSize,
 } from "./geom";
 import { TimingFunction } from "./timing";
@@ -41,13 +45,83 @@ import {
   normalize,
 } from "./util";
 
+function calculateRelativePercentPos(e: MouseEvent): Position {
+  const target = e.currentTarget as HTMLElement;
+  const clientRect = elemClientRect(target);
+  const relativeMousePos = clientToRelative({ x: e.x, y: e.y }, target);
+  return {
+    x: relativeMousePos.x / clientRect.width,
+    y: relativeMousePos.y / clientRect.height,
+  };
+}
+
 function handleDrag<T>(
-  initialSortable: SortableRef<T>,
-  group?: SortableGroup<T>,
+  initialMouseEvent: MouseEvent,
+  sortable: SortableRef<T>,
+  group: Set<SortableRef<T>> | undefined,
+  dragState: DragState<T>,
   item: T,
-  idx: Accessor<number>,
 ) {
-  // TODO: implement
+  const relativeMouseDownPercentPos =
+    calculateRelativePercentPos(initialMouseEvent);
+  console.log(relativeMouseDownPercentPos);
+
+  createEffect(() => {
+    const itemDraggingState = dragState.draggingItemState();
+    if (itemDraggingState == null) {
+      return;
+    }
+
+    const itemRef = itemDraggingState.ref();
+    if (itemRef == null) {
+      return;
+    }
+
+    let relativePosition: Position | undefined;
+
+    if (itemDraggingState.animationController != null) {
+      const controller = itemDraggingState.animationController;
+      controller.disable();
+      onCleanup(() => {
+        controller.enable(relativePosition);
+      });
+    }
+
+    const mouseMoveListener = (e: MouseEvent) => {
+      const mousePosition = clientToRelative(
+        { x: e.clientX, y: e.clientY },
+        sortable.parent,
+      );
+
+      itemRef.style.transform = "";
+
+      const layoutRect = elemParentRelativeRect(itemRef);
+
+      relativePosition = {
+        x: mousePosition.x - relativeMouseDownPercentPos.x * layoutRect.width,
+        y: mousePosition.y - relativeMouseDownPercentPos.y * layoutRect.height,
+      };
+
+      const layoutRelativePosition = {
+        x: relativePosition.x - layoutRect.x,
+        y: relativePosition.y - layoutRect.y,
+      };
+
+      itemRef.style.transform = `translate(${layoutRelativePosition.x}px, ${layoutRelativePosition.y}px)`;
+    };
+
+    const dragEndListener = () => {
+      dragState.setDragging(undefined);
+      dragState.setDraggingItemState(undefined);
+    };
+
+    document.addEventListener("mousemove", mouseMoveListener);
+    document.addEventListener("mouseup", dragEndListener);
+    onCleanup(() => {
+      document.removeEventListener("mousemove", mouseMoveListener);
+      document.removeEventListener("mouseup", dragEndListener);
+    });
+  });
 }
 
 function addGlobalCursorGrabbingStyle(): () => void {
@@ -60,9 +134,9 @@ function addGlobalCursorGrabbingStyle(): () => void {
 interface SortableRef<T> {
   readonly parent: HTMLElement;
   readonly props: SortableProps<T>;
-  readonly itemRefs: HTMLElement[];
-  readonly setMouseDownItem: (item?: T) => void;
+  readonly itemStates: Map<T, ItemState>;
 }
+
 interface DragHandler<T> {
   readonly mouseDown: Accessor<T | undefined>;
   readonly startDrag: (
@@ -88,7 +162,7 @@ interface DragHandler<T> {
   ) => void;
 }
 
-interface DragState<T> {
+interface OldDragState<T> {
   item: T;
   itemElem: HTMLElement;
   startItemElem: HTMLElement;
@@ -122,7 +196,7 @@ interface DragState<T> {
 function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
   const [mouseDown, setMouseDown] = createSignal<T>();
 
-  let curState: DragState<T> | undefined;
+  let curState: OldDragState<T> | undefined;
 
   function updateMouseData(e: MouseEvent) {
     const state = curState!;
@@ -238,10 +312,11 @@ function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
     const rect = elemPageRect(state.itemElem);
 
     if (intersects(rect, elemPageRect(state.sourceElem))) {
-      const indexCheck = state.source.props.checkIndex?.(
-        pageToRelative(rect, state.sourceElem),
-        state.idx(),
-      );
+      const indexCheck = 0; // TODO
+      // const indexCheck = state.source.props.checkIndex?.(
+      //   pageToRelative(rect, state.sourceElem),
+      //   state.idx(),
+      // );
       if (
         indexCheck != null &&
         state.idx() !== Math.min(state.source.props.each.length, indexCheck)
@@ -257,12 +332,13 @@ function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
         if (
           sortable === state.source ||
           !intersects(rect, elemPageRect(sortable.parent)) ||
-          !(sortable.props.insertFilter?.(state.item) ?? true)
+          !(sortable.props.shouldInsert?.(state.item) ?? true)
         ) {
           continue;
         }
 
-        const indexCheck = sortable.checkIndex?.(rect, state.idx());
+        const indexCheck = 0; // TODO
+        // const indexCheck = sortable.props.checkIndex?.(rect, state.idx());
         if (indexCheck != null) {
           state.source.props.onRemove?.(state.item, state.idx());
           sortable.props.onInsert?.(state.item, indexCheck);
@@ -381,7 +457,7 @@ function createDragHandler<T>(sortables?: Set<SortableRef<T>>): DragHandler<T> {
 
       updateItemElemPosition();
       addListeners();
-      setMouseDown(item); // solid setters don't work well with generics
+      // setMouseDown(item); // solid setters don't work well with generics
     },
     continueDrag: (
       item,
@@ -486,10 +562,34 @@ export function defaultIndexCheck(threshold: number): CheckIndex {
   };
 }
 
-export type SortableGroup<T> = Set<SortableRef<T>>;
+interface DragState<T> {
+  readonly dragging: Accessor<T | undefined>;
+  readonly setDragging: (value: T | undefined) => void;
+  readonly draggingItemState: Accessor<ItemState | undefined>;
+  readonly setDraggingItemState: Setter<ItemState | undefined>;
+}
+
+function createDragState<T>(): DragState<T> {
+  const [dragging, setDragging] = createSignal<T>();
+  const [draggingItemState, setDraggingItemState] = createSignal<ItemState>();
+  return {
+    dragging,
+    setDragging,
+    draggingItemState,
+    setDraggingItemState,
+  };
+}
+
+export interface SortableGroup<T> {
+  readonly sortables: Set<SortableRef<T>>;
+  readonly dragState: DragState<T>;
+}
 
 export function createSortableGroup<T>(): SortableGroup<T> {
-  return new Set();
+  return {
+    sortables: new Set(),
+    dragState: createDragState<T>(),
+  };
 }
 
 interface SortableHooks<T> {
@@ -511,11 +611,11 @@ interface ClickProps {
 }
 
 interface SortableProps<T> extends SortableHooks<T>, ClickProps {
-  readonly each: ReadonlyArray<T> | undefined | null | false;
+  readonly each: ReadonlyArray<T>;
 
   readonly group?: SortableGroup<T>;
 
-  readonly insertFilter?: (item: T) => boolean;
+  readonly shouldInsert?: (item: T) => boolean;
 
   readonly autoscroll?: boolean | HTMLElement;
   readonly autoscrollBorderWidth?: number;
@@ -529,50 +629,62 @@ interface SortableProps<T> extends SortableHooks<T>, ClickProps {
   readonly mouseDownClass?: string;
 }
 
+interface ItemState {
+  readonly idx: Accessor<number>;
+  readonly ref: Accessor<HTMLElement>;
+  animationController?: SortableAnimationController;
+}
+
 export function Sortable2<T, U extends JSX.Element>(
   props: SortableProps<T> & {
     readonly children: (props: SortableItemProps<T>) => U;
   },
 ) {
+  let childRef!: HTMLDivElement;
   let parentRef!: HTMLElement;
   let sortableRef!: SortableRef<T>;
 
-  const animationControllers: SortableAnimationController[] = [];
-  const itemRefs: HTMLElement[] = [];
+  const itemStates = new Map<T, ItemState>();
 
-  const [mouseDownItem, setMouseDownItem] = createSignal<T>();
-  const isMouseDown = createSelector(mouseDownItem, (a, b) => a == b);
+  const dragState = createMemo(
+    () => props.group?.dragState ?? createDragState<T>(),
+  );
+
+  const isMouseDownSelector = createSelector(
+    () => dragState().dragging(),
+    (item, dragging) => item === dragging,
+  );
 
   onMount(() => {
+    if (childRef.parentElement == null) {
+      console.error("sortable must have parent element");
+      return;
+    } else {
+      parentRef = childRef.parentElement;
+    }
+
     sortableRef = {
       parent: parentRef,
       props,
-      itemRefs,
-      setMouseDownItem,
+      itemStates,
     };
 
     createEffect(() => {
       const group = props.group;
-      group?.add(sortableRef);
-      onCleanup(() => group?.delete(sortableRef));
+      group?.sortables.add(sortableRef);
+      onCleanup(() => group?.sortables.delete(sortableRef));
     });
   });
 
+  const owner = getOwner();
+
   return (
     <>
-      <div
-        ref={(e) => {
-          if (e.parentElement == null) {
-            console.error("sortable must have parent element");
-            return;
-          } else {
-            parentRef = e.parentElement;
-          }
-        }}
-        style={{ display: "none" }}
-      />
+      <div ref={childRef} style={{ display: "none" }} />
       <For each={props.each}>
         {(item, idx) => {
+          const isMouseDown = createMemo(() => isMouseDownSelector(item));
+
           const handleRefs = createSetSignal<HTMLElement>();
 
           const resolved = children(() => (
@@ -580,12 +692,12 @@ export function Sortable2<T, U extends JSX.Element>(
               {props.children({
                 item,
                 idx,
-                isMouseDown: () => isMouseDown(item),
+                isMouseDown,
               })}
             </SortableDirectiveContext.Provider>
           ));
 
-          const itemRef = createMemo(
+          const ref = createMemo(
             on(
               () => resolved.toArray(),
               (arr) => {
@@ -593,50 +705,69 @@ export function Sortable2<T, U extends JSX.Element>(
                   return arr[0];
                 } else {
                   throw Error(
-                    `sortable child at index ${idx()} did not resolve to a DOM node`,
+                    `sortable child at index ${untrack(
+                      idx,
+                    )} did not resolve to a DOM node`,
                   );
                 }
               },
             ),
           );
-          createEffect(() => (itemRefs[idx()] = itemRef()));
+
+          const state: ItemState = {
+            idx,
+            ref,
+          };
+          itemStates.set(item, state);
+          onCleanup(() => itemStates.delete(item));
+
+          createEffect(() => {
+            if (isMouseDown()) {
+              dragState().setDraggingItemState(state);
+            }
+          });
 
           onMount(() => {
-            let animationController: SortableAnimationController | undefined;
-
             createEffect(() => {
               if (props.animated ?? false) {
                 const controller = createSortableAnimationController(
-                  itemRef(),
+                  ref(),
                   () => props.timingFunction,
                   () => props.animationDurationMs,
                 );
-                onCleanup(controller.cleanup);
-                animationController = controller;
-
-                createEffect(() => {
-                  const i = idx();
-                  animationControllers[i] = controller;
+                state.animationController = controller;
+                onCleanup(() => {
+                  state.animationController = undefined;
+                  controller.cleanup();
                 });
               }
             });
 
             createEffect(() => {
               const cls = props.mouseDownClass;
-              if (cls != null && isMouseDown(item)) {
-                itemRef().classList.add(cls);
-                onCleanup(() => itemRef().classList.remove(cls));
+              if (cls != null && isMouseDown()) {
+                ref().classList.add(cls);
+                onCleanup(() => ref().classList.remove(cls));
               }
             });
           });
 
-          const mouseDownListener = () => {
-            handleDrag(sortableRef, props.group, item, idx);
+          const mouseDownListener = (e: MouseEvent) => {
+            dragState().setDraggingItemState(state);
+            runWithOwner(owner, () =>
+              handleDrag(
+                e,
+                sortableRef,
+                props.group?.sortables,
+                dragState(),
+                item,
+              ),
+            );
           };
 
           createEffect(() => {
             const hs = handleRefs.get();
-            const listenables = hs.size > 0 ? [...hs] : [itemRef()];
+            const listenables = hs.size > 0 ? [...hs] : [ref()];
             for (const listenable of listenables) {
               listenable.addEventListener("mousedown", mouseDownListener);
             }

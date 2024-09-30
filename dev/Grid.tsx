@@ -1,7 +1,7 @@
 import { Component, For, createSignal, onCleanup, onMount } from "solid-js";
 
 import { createSortableAnimationController } from "../src/animation";
-import { easeInOutQuad, easeOutQuad, linear } from "../src/ease";
+import { easeInOutQuad, easeOutQuad, linear } from "../src/timing";
 import { Sortable2 } from "../src/Sortable2";
 import { move } from "../src";
 
@@ -59,12 +59,14 @@ export const GridPage: Component = () => {
       <button onClick={() => setLargeGap((v) => !v)}>Gap</button>
 
       <div
+        draggable={false}
         style={{
           padding: "20px",
           display: "grid",
           gap: largeGap() ? "50px" : "20px",
           "grid-template-columns": "repeat(auto-fill, 150px)",
           "justify-content": "center",
+          "user-select": "none",
         }}
       >
         <Sortable2
@@ -78,6 +80,7 @@ export const GridPage: Component = () => {
             const color = getRandomColor();
             return (
               <div
+                draggable={false}
                 style={{
                   height: "100px",
                   "background-color": color,
