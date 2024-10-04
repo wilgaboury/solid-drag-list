@@ -56,6 +56,15 @@ function handleDrag<T>(
   item: T,
 ) {
   const cleanupGlobalCursorGrabbingStyle = addGlobalCursorGrabbingStyle();
+  const getItemRef = () => sortable.itemEntries.get(item)?.state.ref();
+
+  // todo: this should be an effect in case item ref changes
+  {
+    const itemRef = getItemRef();
+    if (itemRef != null) {
+      itemRef.style.zIndex = "1";
+    }
+  }
 
   const relativeMouseDownPercentPos =
     calculateRelativePercentPos(initialMouseEvent);
@@ -64,7 +73,7 @@ function handleDrag<T>(
 
   let mouseClientPosition: Position | undefined;
   const updateTransform = () => {
-    const itemRef = sortable.itemEntries.get(item)?.state.ref();
+    const itemRef = getItemRef();
 
     if (itemRef == null || mouseClientPosition == null) {
       return;
@@ -93,7 +102,7 @@ function handleDrag<T>(
   };
 
   const updateTransformAndDoMove = () => {
-    const itemRef = sortable.itemEntries.get(item)?.state.ref();
+    const itemRef = getItemRef();
 
     if (itemRef == null) {
       return;
@@ -155,10 +164,17 @@ function handleDrag<T>(
 
   const dragEnd = () => {
     const controller = sortable.itemEntries.get(item)?.animationController;
+    const itemRef = getItemRef();
     if (controller != null) {
-      controller.enable(relativePosition);
+      controller.enable(relativePosition, () => {
+        if (itemRef != null) {
+          itemRef.style.zIndex = "0";
+        }
+      });
     } else {
-      sortable.itemEntries.get(item)!.state.ref().style.transform = "";
+      if (itemRef != null) {
+        itemRef.style.transform = "";
+      }
     }
 
     dragState.setDragging(undefined);
@@ -527,16 +543,6 @@ export function Sortable2<T, U extends JSX.Element>(
               ref.classList.add(cls);
               onCleanup(() => {
                 ref.classList.remove(cls);
-              });
-            }
-          });
-
-          createEffect(() => {
-            if (isMouseDown()) {
-              const ref = state.ref();
-              ref.style.zIndex = "1";
-              onCleanup(() => {
-                ref.style.zIndex = "0";
               });
             }
           });

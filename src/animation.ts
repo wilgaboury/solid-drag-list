@@ -38,7 +38,7 @@ function frame(time: DOMHighResTimeStamp) {
 }
 
 export interface SortableAnimationController {
-  readonly enable: (start?: Position) => void;
+  readonly enable: (start?: Position, onFinish?: () => any) => void;
   readonly disable: () => void;
   readonly enabled: () => boolean;
   readonly layoutParentRelativeRect: () => Rect;
@@ -61,6 +61,7 @@ export function createSortableAnimationController(
   let layoutParentRelativeRect = elemParentRelativeRect(element);
   let layoutRelativePos: Position = toPosition(layoutParentRelativeRect);
   let newLayoutRelativePos: Position | undefined;
+  let onFinish: (() => any) | undefined;
 
   let startTime: DOMHighResTimeStamp | undefined;
   let startPos: Position | undefined;
@@ -111,6 +112,8 @@ export function createSortableAnimationController(
         startTime = undefined;
         startPos = undefined;
         currentPos = undefined;
+        onFinish?.();
+        onFinish = undefined;
       } else {
         const frac = timingFunc()(elapsed / animDurMs());
         currentPos = {
@@ -131,11 +134,12 @@ export function createSortableAnimationController(
   }
 
   return {
-    enable: (start) => {
+    enable: (start, inputOnFinish) => {
       enabled = true;
       if (start != null) {
         layoutRelativePos = start;
       }
+      onFinish = inputOnFinish;
     },
     disable: () => {
       enabled = false;
