@@ -15,7 +15,7 @@ export function getRandomColor() {
 
 export const GridPage: Component = () => {
   const [elements, setElements] = createSignal<ReadonlyArray<number>>(
-    Array.from(Array(20).keys()),
+    Array.from(Array(200).keys()),
   );
   const [largeGap, setLargeGap] = createSignal(false);
 
@@ -72,7 +72,7 @@ export const GridPage: Component = () => {
           each={elements()}
           onMove={(_item, from, to) => setElements((e) => move(e, from, to))}
           animated
-          animationDurationMs={250}
+          animationDurationMs={300}
           timingFunction={easeOutQuad}
         >
           {({ item, isMouseDown }) => {

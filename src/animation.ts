@@ -1,4 +1,10 @@
-import { Position, clientToRelative, posEquals } from "./geom";
+import {
+  Position,
+  Rect,
+  elemParentRelativeRect,
+  posEquals,
+  toPosition,
+} from "./geom";
 import { TimingFunction, linear } from "./timing";
 
 interface ControllerHandle {
@@ -10,8 +16,11 @@ interface ControllerHandle {
 const controllers: Array<ControllerHandle> = [];
 
 function frame(time: DOMHighResTimeStamp) {
-  // Breaking the controller into steps ensures that this never causes more than one
-  // forced reflow, which significantly improves performance.
+  if (controllers.length == 0) {
+    return;
+  }
+
+  // breaking controllers into steps ensures there isn't more than one forced reflow, which significantly improves animation performance
 
   for (const controller of controllers) {
     controller.clear();
@@ -25,16 +34,14 @@ function frame(time: DOMHighResTimeStamp) {
     controller.animate(time);
   }
 
-  if (controllers.length > 0) {
-    requestAnimationFrame(frame);
-  }
+  requestAnimationFrame(frame);
 }
 
 export interface SortableAnimationController {
   readonly enable: (start?: Position) => void;
   readonly disable: () => void;
   readonly enabled: () => boolean;
-  readonly layoutClientBoundingRect: () => DOMRect;
+  readonly layoutParentRelativeRect: () => Rect;
   readonly cleanup: () => void;
 }
 
@@ -51,11 +58,8 @@ export function createSortableAnimationController(
 
   let enabled = true;
 
-  let layoutClientBoundingRect = element.getBoundingClientRect();
-  let layoutRelativePos: Position = clientToRelative(
-    layoutClientBoundingRect,
-    element.parentElement!,
-  );
+  let layoutParentRelativeRect = elemParentRelativeRect(element);
+  let layoutRelativePos: Position = toPosition(layoutParentRelativeRect);
   let newLayoutRelativePos: Position | undefined;
 
   let startTime: DOMHighResTimeStamp | undefined;
@@ -78,11 +82,8 @@ export function createSortableAnimationController(
         return;
       }
 
-      layoutClientBoundingRect = element.getBoundingClientRect();
-      const currentLayoutRelativePos = clientToRelative(
-        layoutClientBoundingRect,
-        element.parentElement!,
-      );
+      layoutParentRelativeRect = elemParentRelativeRect(element);
+      const currentLayoutRelativePos = toPosition(layoutParentRelativeRect);
       if (!posEquals(layoutRelativePos, currentLayoutRelativePos)) {
         newLayoutRelativePos = currentLayoutRelativePos;
       }
@@ -143,7 +144,7 @@ export function createSortableAnimationController(
       currentPos = undefined;
     },
     enabled: () => enabled,
-    layoutClientBoundingRect: () => layoutClientBoundingRect,
+    layoutParentRelativeRect: () => layoutParentRelativeRect,
     cleanup: () => {
       controllers.splice(idx, 1);
     },
