@@ -373,6 +373,7 @@ interface SortableHooks<T> {
   readonly onMove?: (item: T, fromIdx: number, toIdx: number) => void;
   readonly onRemove?: (item: T, idx: number) => void;
   readonly onInsert?: (item: T, idx: number) => void;
+  readonly onHoldOver?: (item: T, fromIdx: number, toIdx: number) => void;
 }
 
 interface InheritableSortableProps {
