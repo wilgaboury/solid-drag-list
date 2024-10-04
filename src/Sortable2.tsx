@@ -123,11 +123,7 @@ function handleDrag<T>(
         const a = area(intersect);
         const percent = Math.max(a / area(rect), a / area(testRect));
         if (percent > 0.5) {
-          sortable.props.onMove?.(
-            item,
-            sortable.itemEntries.get(item)!.idx(),
-            idx,
-          );
+          sortable.props.onMove?.(sortable.itemEntries.get(item)!.idx(), idx);
           updateTransform();
           return true;
         }
@@ -370,10 +366,10 @@ interface SortableHooks<T> {
     startIdx: number | undefined,
     endIdx: number | undefined,
   ) => void;
-  readonly onMove?: (item: T, fromIdx: number, toIdx: number) => void;
-  readonly onRemove?: (item: T, idx: number) => void;
-  readonly onInsert?: (item: T, idx: number) => void;
-  readonly onHoldOver?: (item: T, fromIdx: number, toIdx: number) => void;
+  readonly onMove?: (fromIdx: number, toIdx: number) => void;
+  readonly onRemove?: (idx: number) => void;
+  readonly onInsert?: (idx: number) => void;
+  readonly onHoldOver?: (fromIdx: number, toIdx: number) => void;
 }
 
 interface InheritableSortableProps {

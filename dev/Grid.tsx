@@ -70,7 +70,7 @@ export const GridPage: Component = () => {
       >
         <Sortable2
           each={elements()}
-          onMove={(_item, from, to) => setElements((e) => move(e, from, to))}
+          onMove={(from, to) => setElements((arr) => move(arr, from, to))}
           animated
           animationDurationMs={300}
           timingFunction={easeOutQuad}
