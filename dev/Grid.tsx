@@ -1,8 +1,6 @@
-import { Component, For, createSignal, onCleanup, onMount } from "solid-js";
+import { Component, createSignal } from "solid-js";
 
-import { easeOutQuad } from "../src/timing";
-import { Sortable2 } from "../src/Sortable2";
-import { move } from "../src";
+import { easeOutQuad, move, Sortable } from "../src";
 
 export function getRandomColor() {
   var letters = "0123456789ABCDEF";
@@ -68,7 +66,7 @@ export const GridPage: Component = () => {
           "user-select": "none",
         }}
       >
-        <Sortable2
+        <Sortable
           each={elements()}
           onMove={(from, to) => setElements((arr) => move(arr, from, to))}
           animated
@@ -93,7 +91,7 @@ export const GridPage: Component = () => {
               </div>
             );
           }}
-        </Sortable2>
+        </Sortable>
       </div>
     </>
   );

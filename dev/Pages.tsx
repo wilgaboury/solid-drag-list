@@ -1,5 +1,4 @@
 import { A, Route, Router } from "@solidjs/router";
-import { LayoutExplorer } from "./LayoutExplorer";
 import { TransformMeasureTest } from "./TransformMeasureTest";
 import { GridPage } from "./Grid";
 
@@ -22,7 +21,6 @@ export function Pages() {
           </ul>
         )}
       />
-      <Route path="/layout-explorer" component={LayoutExplorer} />
       <Route path="/transform-measure-test" component={TransformMeasureTest} />
       <Route path="/grid-test" component={GridPage} />
     </Router>
