@@ -7,19 +7,42 @@ import {
 } from "./geom";
 import { TimingFunction, linear } from "./timing";
 
+let running: number | undefined;
+
+function start() {
+  if (controllers.size > 0 && running == null) {
+    running = requestAnimationFrame(frame);
+  }
+}
+
+function stop() {
+  if (running != null) {
+    cancelAnimationFrame(running);
+    running = undefined;
+    for (const controller of controllers) {
+      controller.cancel();
+    }
+  }
+}
+
 interface ControllerHandle {
+  readonly cancel: () => void;
   readonly clear: () => void;
   readonly measure: () => void;
   readonly animate: (time: DOMHighResTimeStamp) => void;
 }
 
-const controllers: Array<ControllerHandle> = [];
+const controllers: Set<ControllerHandle> = new Set();
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    stop();
+  } else {
+    start();
+  }
+});
 
 function frame(time: DOMHighResTimeStamp) {
-  if (controllers.length == 0) {
-    return;
-  }
-
   // breaking controllers into steps ensures there isn't more than one forced reflow, which significantly improves animation performance
 
   for (const controller of controllers) {
@@ -38,11 +61,10 @@ function frame(time: DOMHighResTimeStamp) {
 }
 
 export interface SortableAnimationController {
-  readonly enable: (start?: Position, onFinish?: () => any) => void;
-  readonly disable: () => void;
-  readonly enabled: () => boolean;
+  readonly start: (position?: Position) => Promise<void>;
+  readonly stop: () => void;
+  readonly running: () => boolean;
   readonly layoutParentRelativeRect: () => Rect;
-  readonly cleanup: () => void;
 }
 
 const defaultTimingFunc = linear;
@@ -56,12 +78,10 @@ export function createSortableAnimationController(
   const timingFunc = () => timingFuncArg?.() ?? defaultTimingFunc;
   const animDurMs = () => animDurMsArg?.() ?? defaultAnimDurMs;
 
-  let enabled = true;
-
   let layoutParentRelativeRect = elemParentRelativeRect(element);
   let layoutRelativePos: Position = toPosition(layoutParentRelativeRect);
   let newLayoutRelativePos: Position | undefined;
-  let onFinish: (() => any) | undefined;
+  let resolveAnimationFinish: (() => any) | undefined;
 
   let startTime: DOMHighResTimeStamp | undefined;
   let startPos: Position | undefined;
@@ -71,18 +91,16 @@ export function createSortableAnimationController(
   const animating = () => startTime != null;
 
   const handle: ControllerHandle = {
+    cancel: () => {
+      element.style.transform = "";
+      startTime = undefined;
+      startPos = undefined;
+      currentPos = undefined;
+    },
     clear: () => {
-      if (!enabled) {
-        return;
-      }
-
       element.style.transform = "";
     },
     measure: () => {
-      if (!enabled) {
-        return;
-      }
-
       layoutParentRelativeRect = elemParentRelativeRect(element);
       const currentLayoutRelativePos = toPosition(layoutParentRelativeRect);
       if (!posEquals(layoutRelativePos, currentLayoutRelativePos)) {
@@ -90,7 +108,9 @@ export function createSortableAnimationController(
       }
     },
     animate: (time: DOMHighResTimeStamp) => {
-      if (!enabled || (!animating() && !startAnimating())) {
+      if (!animating() && !startAnimating()) {
+        resolveAnimationFinish?.();
+        resolveAnimationFinish = undefined;
         return;
       }
 
@@ -112,8 +132,8 @@ export function createSortableAnimationController(
         startTime = undefined;
         startPos = undefined;
         currentPos = undefined;
-        onFinish?.();
-        onFinish = undefined;
+        resolveAnimationFinish?.();
+        resolveAnimationFinish = undefined;
       } else {
         const frac = timingFunc()(elapsed / animDurMs());
         currentPos = {
@@ -127,30 +147,36 @@ export function createSortableAnimationController(
     },
   };
 
-  const idx = controllers.length;
-  controllers.push(handle);
-  if (idx == 0) {
-    requestAnimationFrame(frame);
-  }
-
   return {
-    enable: (start, inputOnFinish) => {
-      enabled = true;
-      if (start != null) {
-        layoutRelativePos = start;
+    start: (position) => {
+      if (!controllers.has(handle)) {
+        controllers.add(handle);
+        start();
+
+        if (position != null) {
+          layoutRelativePos = position;
+        }
+
+        const { promise, resolve } = Promise.withResolvers<void>();
+        resolveAnimationFinish = resolve;
+        return promise;
+      } else {
+        return Promise.resolve();
       }
-      onFinish = inputOnFinish;
     },
-    disable: () => {
-      enabled = false;
-      startTime = undefined;
-      startPos = undefined;
-      currentPos = undefined;
+    stop: () => {
+      if (controllers.has(handle)) {
+        controllers.delete(handle);
+        if (controllers.size == 0) {
+          stop();
+        }
+
+        startTime = undefined;
+        startPos = undefined;
+        currentPos = undefined;
+      }
     },
-    enabled: () => enabled,
+    running: () => controllers.has(handle),
     layoutParentRelativeRect: () => layoutParentRelativeRect,
-    cleanup: () => {
-      controllers.splice(idx, 1);
-    },
   };
 }

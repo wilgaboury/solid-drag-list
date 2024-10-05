@@ -1,4 +1,4 @@
-import { Component, createSignal } from "solid-js";
+import { Component, createEffect, createSignal } from "solid-js";
 
 import { easeOutQuad, move, Sortable } from "../src";
 
@@ -69,8 +69,8 @@ export const GridPage: Component = () => {
         <Sortable
           each={elements()}
           onMove={(from, to) => setElements((arr) => move(arr, from, to))}
-          animated
-          animationDurationMs={300}
+          animated={elements().length <= 200}
+          animationDurationMs={250}
           timingFunction={easeOutQuad}
         >
           {({ item, isMouseDown }) => {

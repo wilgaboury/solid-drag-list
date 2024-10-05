@@ -30,7 +30,9 @@ import {
   Position,
   Rect,
   area,
+  clientToPage,
   clientToRelative,
+  dist,
   elemClientRect,
   elemParentRelativeRect,
   intersection,
@@ -38,163 +40,9 @@ import {
 import { TimingFunction, linear } from "./timing";
 import { SetSignal, createSetSignal } from "./util";
 
-function calculateRelativePercentPos(e: MouseEvent): Position {
-  const target = e.currentTarget as HTMLElement;
-  const clientRect = elemClientRect(target);
-  const relativeMousePos = clientToRelative({ x: e.x, y: e.y }, target);
-  return {
-    x: relativeMousePos.x / clientRect.width,
-    y: relativeMousePos.y / clientRect.height,
-  };
-}
-
-function handleDrag<T>(
-  initialMouseEvent: MouseEvent,
-  sortable: SortableRef<T>,
-  group: SortableGroup<T> | undefined,
-  dragState: DragState<T>,
-  item: T,
-) {
-  const cleanupGlobalCursorGrabbingStyle = addGlobalCursorGrabbingStyle();
-  const getItemRef = () => sortable.itemEntries.get(item)?.state.ref();
-
-  // todo: this should be an effect in case item ref changes
-  {
-    const itemRef = getItemRef();
-    if (itemRef != null) {
-      itemRef.style.zIndex = "1";
-    }
-  }
-
-  const relativeMouseDownPercentPos =
-    calculateRelativePercentPos(initialMouseEvent);
-
-  let relativePosition: Position | undefined;
-
-  let mouseClientPosition: Position | undefined;
-  const updateTransform = () => {
-    const itemRef = getItemRef();
-
-    if (itemRef == null || mouseClientPosition == null) {
-      return;
-    }
-
-    const mousePosition = clientToRelative(
-      mouseClientPosition,
-      sortable.parent,
-    );
-
-    itemRef.style.transform = "";
-
-    const layoutRect = elemParentRelativeRect(itemRef);
-
-    relativePosition = {
-      x: mousePosition.x - relativeMouseDownPercentPos.x * layoutRect.width,
-      y: mousePosition.y - relativeMouseDownPercentPos.y * layoutRect.height,
-    };
-
-    const layoutRelativePosition = {
-      x: relativePosition.x - layoutRect.x,
-      y: relativePosition.y - layoutRect.y,
-    };
-
-    itemRef.style.transform = `translate(${layoutRelativePosition.x}px, ${layoutRelativePosition.y}px)`;
-  };
-
-  const updateTransformAndDoMove = () => {
-    const itemRef = getItemRef();
-
-    if (itemRef == null) {
-      return;
-    }
-
-    updateTransform();
-
-    const rect = elemParentRelativeRect(itemRef);
-
-    const check = (idx: number) => {
-      const entry = sortable.itemEntries.get(sortable.props.each[idx]!)!;
-      const testRect =
-        entry.animationController?.layoutParentRelativeRect() ??
-        elemParentRelativeRect(entry.state.ref());
-      const intersect = intersection(rect, testRect);
-
-      if (intersect != null) {
-        const a = area(intersect);
-        const percent = Math.max(a / area(rect), a / area(testRect));
-        if (percent > 0.5) {
-          sortable.props.onMove?.(sortable.itemEntries.get(item)!.idx(), idx);
-          updateTransform();
-          return true;
-        }
-      }
-      return false;
-    };
-
-    // search outward from current position, should result in less comparisons than a typical linear search when there is a match
-    const currentIdx = sortable.itemEntries.get(item)!.idx();
-    let backward = currentIdx - 1;
-    let forward = currentIdx + 1;
-
-    while (backward >= 0 || forward < sortable.props.each.length) {
-      if (backward >= 0 && check(backward)) {
-        break;
-      }
-      if (forward < sortable.props.each.length && check(forward)) {
-        break;
-      }
-
-      backward--;
-      forward++;
-    }
-  };
-
-  const mouseMoveListener = (e: MouseEvent) => {
-    mouseClientPosition = { x: e.clientX, y: e.clientY };
-    updateTransformAndDoMove();
-  };
-
-  const scrollListener = () => {
-    updateTransformAndDoMove();
-  };
-
-  const dragEnd = () => {
-    const controller = sortable.itemEntries.get(item)?.animationController;
-    const itemRef = getItemRef();
-    if (controller != null) {
-      controller.enable(relativePosition, () => {
-        if (itemRef != null) {
-          itemRef.style.zIndex = "0";
-        }
-      });
-    } else {
-      if (itemRef != null) {
-        itemRef.style.transform = "";
-      }
-    }
-
-    dragState.setDragging(undefined);
-    document.removeEventListener("mousemove", mouseMoveListener);
-    document.removeEventListener("scroll", scrollListener);
-    document.removeEventListener("mouseup", dragEnd);
-    cleanupGlobalCursorGrabbingStyle();
-  };
-
-  document.addEventListener("mousemove", mouseMoveListener);
-  document.addEventListener("scroll", scrollListener);
-  document.addEventListener("mouseup", dragEnd);
-}
-
-function addGlobalCursorGrabbingStyle(): () => void {
-  const cursorStyle = document.createElement("style");
-  cursorStyle.innerHTML = "*{cursor: grabbing!important;}";
-  document.head.appendChild(cursorStyle);
-  return () => document.head.removeChild(cursorStyle);
-}
-
 interface SortableRef<T> {
   readonly parent: HTMLElement;
-  readonly props: SortableProps<T>;
+  readonly props: SortableProps<T> & typeof defaultInheritableSortableProps;
   readonly itemEntries: Map<T, ItemEntry>;
 }
 
@@ -228,38 +76,205 @@ export function sortableHandle(el: Element, _accessor: () => any) {
   }
 }
 
-export type CheckIndex = (
-  layout: ReadonlyArray<Rect | undefined>,
-  test: Rect,
-  index: number,
-) => number | undefined;
+function calculateRelativePercentPosition(e: MouseEvent): Position {
+  const target = e.currentTarget as HTMLElement;
+  const clientRect = elemClientRect(target);
+  const relativeMousePos = clientToRelative({ x: e.x, y: e.y }, target);
+  return {
+    x: relativeMousePos.x / clientRect.width,
+    y: relativeMousePos.y / clientRect.height,
+  };
+}
 
-export function overlapPercentIndexCheck(threshold: number): CheckIndex {
-  return (layout, test, index) => {
-    const testArea = area(test);
-    let max = 0;
-    let maxIdx = undefined;
+function handleDrag<T>(
+  initialMouseEvent: MouseEvent,
+  sortable: SortableRef<T>,
+  group: SortableGroup<T> | undefined,
+  dragState: DragState<T>,
+  item: T,
+) {
+  const cleanupGlobalCursorGrabbingStyle = addGlobalCursorGrabbingStyle();
+  const getItemRef = () => sortable.itemEntries.get(item)?.state.ref();
 
-    for (const [idx, rect] of layout.entries()) {
-      if (index == idx || rect == null) {
-        continue;
+  // todo: this should be an effect in case item ref changes
+  {
+    const itemRef = getItemRef();
+    if (itemRef != null) {
+      itemRef.style.zIndex = "1";
+    }
+  }
+
+  const relativeMouseDownPercentPosition =
+    calculateRelativePercentPosition(initialMouseEvent);
+
+  const startSortable = sortable;
+  const startIdx = sortable.itemEntries.get(item)!.idx();
+
+  let mouseClientPosition: Position = {
+    x: initialMouseEvent.x,
+    y: initialMouseEvent.y,
+  };
+  let mouseRelativePosition: Position = clientToRelative(
+    mouseClientPosition,
+    sortable.parent,
+  );
+  let mouseMoveDistance: number = 0;
+  let initialMouseDownTime = Date.now();
+  let cancelClick = false;
+
+  let itemRelativeDragPosition: Position | undefined;
+
+  const updateMouseRelativePosition = () => {
+    const newMouseRelativePosition: Position = clientToRelative(
+      mouseClientPosition,
+      sortable.parent,
+    );
+    mouseMoveDistance += dist(mouseRelativePosition, newMouseRelativePosition);
+    mouseRelativePosition = newMouseRelativePosition;
+
+    if (
+      !cancelClick &&
+      (mouseMoveDistance > sortable.props.clickThreshholdDistancePx ||
+        Date.now() - initialMouseDownTime >
+          sortable.props.clickThresholdDurationMs)
+    ) {
+      sortable.props.onDragStart?.(startIdx);
+    }
+  };
+
+  const updateTransform = () => {
+    const itemRef = getItemRef();
+
+    if (itemRef == null || mouseClientPosition == null) {
+      return;
+    }
+
+    itemRef.style.transform = "";
+
+    const layoutRect = elemParentRelativeRect(itemRef);
+
+    itemRelativeDragPosition = {
+      x:
+        mouseRelativePosition.x -
+        relativeMouseDownPercentPosition.x * layoutRect.width,
+      y:
+        mouseRelativePosition.y -
+        relativeMouseDownPercentPosition.y * layoutRect.height,
+    };
+
+    const layoutRelativePosition = {
+      x: itemRelativeDragPosition.x - layoutRect.x,
+      y: itemRelativeDragPosition.y - layoutRect.y,
+    };
+
+    itemRef.style.transform = `translate(${layoutRelativePosition.x}px, ${layoutRelativePosition.y}px)`;
+  };
+
+  const updateTransformAndDoMove = () => {
+    const itemRef = getItemRef();
+
+    if (itemRef == null) {
+      return;
+    }
+
+    updateTransform();
+
+    const rect = elemParentRelativeRect(itemRef);
+
+    const check = (idx: number) => {
+      const entry = sortable.itemEntries.get(sortable.props.each[idx]!)!;
+      const testRect =
+        entry.animationController?.layoutParentRelativeRect() ??
+        elemParentRelativeRect(entry.state.ref());
+      const intersect = intersection(rect, testRect);
+
+      if (intersect != null) {
+        const a = area(intersect);
+        const percent = Math.max(a / area(rect), a / area(testRect));
+        if (percent > 0.5) {
+          cancelClick = true;
+          sortable.props.onMove?.(sortable.itemEntries.get(item)!.idx(), idx);
+          updateTransform();
+          return true;
+        }
+      }
+      return false;
+    };
+
+    // search outward from current position, should result in less comparisons than a typical linear search when there is a match
+    const currentIdx = sortable.itemEntries.get(item)!.idx();
+    let backward = currentIdx - 1;
+    let forward = currentIdx + 1;
+
+    while (backward >= 0 || forward < sortable.props.each.length) {
+      if (backward >= 0 && check(backward)) {
+        break;
+      }
+      if (forward < sortable.props.each.length && check(forward)) {
+        break;
       }
 
-      const i = intersection(rect, test);
+      backward--;
+      forward++;
+    }
+  };
 
-      if (i == null) {
-        continue;
-      }
-      const cover = area(i) / Math.min(area(rect), testArea);
+  const mouseMoveListener = (e: MouseEvent) => {
+    mouseClientPosition = { x: e.clientX, y: e.clientY };
+    updateMouseRelativePosition();
+    updateTransformAndDoMove();
+  };
 
-      if (cover > threshold && cover > max) {
-        max = cover;
-        maxIdx = idx;
+  const scrollListener = () => {
+    updateMouseRelativePosition();
+    updateTransformAndDoMove();
+  };
+
+  const mouseUpListener = () => {
+    if (sortable.props.onClick != null && !cancelClick) {
+      sortable.props.onClick(startIdx);
+    } else {
+      sortable.props.onDragEnd?.(
+        startIdx,
+        sortable.itemEntries.get(item)!.idx(),
+      );
+    }
+
+    dragEnd();
+  };
+
+  const dragEnd = () => {
+    const controller = sortable.itemEntries.get(item)?.animationController;
+    const itemRef = getItemRef();
+    if (controller != null) {
+      controller.start(itemRelativeDragPosition).then(() => {
+        if (itemRef != null) {
+          itemRef.style.zIndex = "0";
+        }
+      });
+    } else {
+      if (itemRef != null) {
+        itemRef.style.transform = "";
       }
     }
 
-    return maxIdx;
+    dragState.setDragging(undefined);
+    document.removeEventListener("mousemove", mouseMoveListener);
+    document.removeEventListener("scroll", scrollListener);
+    document.removeEventListener("mouseup", mouseUpListener);
+    cleanupGlobalCursorGrabbingStyle();
   };
+
+  document.addEventListener("mousemove", mouseMoveListener);
+  document.addEventListener("scroll", scrollListener);
+  document.addEventListener("mouseup", mouseUpListener);
+}
+
+function addGlobalCursorGrabbingStyle(): () => void {
+  const cursorStyle = document.createElement("style");
+  cursorStyle.innerHTML = "*{cursor: grabbing!important;}";
+  document.head.appendChild(cursorStyle);
+  return () => document.head.removeChild(cursorStyle);
 }
 
 interface DragState<T> {
@@ -359,10 +374,9 @@ export function SortableGroupContext<T>(
 }
 
 interface SortableHooks<T> {
-  readonly onClick?: (item: T, idx: number, e: MouseEvent) => void;
-  readonly onDragStart?: (item: T, idx: number) => void;
+  readonly onClick?: (idx: number) => void;
+  readonly onDragStart?: (idx: number) => void;
   readonly onDragEnd?: (
-    item: T,
     startIdx: number | undefined,
     endIdx: number | undefined,
   ) => void;
@@ -377,20 +391,20 @@ interface InheritableSortableProps {
   readonly timingFunction?: TimingFunction;
   readonly animationDurationMs?: number;
 
-  readonly checkIndex?: CheckIndex;
+  readonly moveThreshhold?: number;
 
   readonly mouseDownClass?: string;
 
-  readonly clickDurationMs?: number;
-  readonly clickDistancePx?: number;
+  readonly clickThresholdDurationMs?: number;
+  readonly clickThreshholdDistancePx?: number;
 }
 
-const defaultInheritableSortableProps: Partial<InheritableSortableProps> = {
+const defaultInheritableSortableProps = {
   timingFunction: linear,
   animationDurationMs: 250,
-  checkIndex: overlapPercentIndexCheck(0.5),
-  clickDurationMs: 100,
-  clickDistancePx: 8,
+  moveThreshhold: 0.5,
+  clickThresholdDurationMs: 100,
+  clickThreshholdDistancePx: 8,
 };
 
 interface SortableProps<T> extends InheritableSortableProps, SortableHooks<T> {
@@ -428,7 +442,7 @@ export function Sortable<T, U extends JSX.Element>(
   const dragState = group?.dragState ?? createDragState<T>();
   const owner = group?.owner ?? getOwner();
 
-  props =
+  const resolvedProps =
     group != null
       ? mergeProps(defaultInheritableSortableProps, group.props, props)
       : mergeProps(defaultInheritableSortableProps, props);
@@ -448,7 +462,7 @@ export function Sortable<T, U extends JSX.Element>(
 
     sortableRef = {
       parent: parentRef,
-      props,
+      props: resolvedProps,
       itemEntries,
     };
 
@@ -459,7 +473,7 @@ export function Sortable<T, U extends JSX.Element>(
   return (
     <>
       <div ref={childRef} style={{ display: "none" }} />
-      <For each={props.each}>
+      <For each={resolvedProps.each}>
         {(item, idx) => {
           const isMouseDown = createMemo(() => isMouseDownSelector(item));
 
@@ -468,7 +482,7 @@ export function Sortable<T, U extends JSX.Element>(
 
             const resolved = children(() => (
               <SortableDirectiveContext.Provider value={handleRefs}>
-                {props.children?.({
+                {resolvedProps.children?.({
                   item,
                   idx,
                   isMouseDown,
@@ -499,7 +513,7 @@ export function Sortable<T, U extends JSX.Element>(
           };
 
           const state =
-            props.children != null || group == null
+            resolvedProps.children != null || group == null
               ? createState()
               : group.render({ item, idx, isMouseDown }).state;
 
@@ -511,30 +525,32 @@ export function Sortable<T, U extends JSX.Element>(
           itemEntries.set(item, entry);
           onCleanup(() => itemEntries.delete(item));
 
+          const animatedMemo = createMemo(() => resolvedProps.animated);
           createEffect(() => {
-            if (props.animated ?? false) {
+            if (animatedMemo() ?? false) {
               const controller = createSortableAnimationController(
                 state.ref(),
-                () => props.timingFunction,
-                () => props.animationDurationMs,
+                () => resolvedProps.timingFunction,
+                () => resolvedProps.animationDurationMs,
               );
               entry.animationController = controller;
+              controller.start();
 
               createEffect(() => {
                 if (isMouseDown()) {
-                  controller.disable();
+                  controller.stop();
                 }
               });
 
               onCleanup(() => {
                 entry.animationController = undefined;
-                controller.cleanup();
+                controller.stop();
               });
             }
           });
 
           createEffect(() => {
-            const cls = props.mouseDownClass;
+            const cls = resolvedProps.mouseDownClass;
             if (cls != null && isMouseDown()) {
               const ref = state.ref();
               ref.classList.add(cls);
