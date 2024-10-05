@@ -1,4 +1,4 @@
-import { createTrigger } from "@solid-primitives/trigger";
+import { createSignal } from "solid-js";
 
 /**
  * mod but the result is always positive
@@ -92,7 +92,10 @@ export type SetSignal<T> = {
 };
 
 export function createSetSignal<T>(init?: ReadonlyArray<T>): SetSignal<T> {
-  const [track, dirty] = createTrigger();
+  const [track, dirty] = createSignal(undefined, {
+    equals: false,
+  });
+
   const set = new Set<T>(init);
   return {
     get: () => {
