@@ -122,7 +122,9 @@ function handleDrag<T>(
   let initialMouseDownTime = Date.now();
   let cancelClick = false;
 
-  let itemRelativeDragPosition: Position | undefined;
+  let itemRelativeDragPosition: Position = elemParentRelativeRect(
+    sortable.itemEntries.get(item)!.state.ref(),
+  );
 
   const updateMouseRelativePosition = () => {
     const newMouseRelativePosition: Position = clientToRelative(
