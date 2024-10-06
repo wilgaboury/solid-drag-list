@@ -126,6 +126,8 @@ function handleDrag<T>(
     sortable.itemEntries.get(item)!.state.ref(),
   );
 
+  let insideSortable = true;
+
   const updateMouseRelativePosition = () => {
     const newMouseRelativePosition: Position = clientToRelative(
       mouseClientPosition,
@@ -172,18 +174,16 @@ function handleDrag<T>(
     itemRef.style.transform = `translate(${layoutRelativePosition.x}px, ${layoutRelativePosition.y}px)`;
   };
 
-  const updateTransformAndDoMove = () => {
+  const checkAndRunMoveHook = () => {
     const itemRef = getItemRef();
 
     if (itemRef == null) {
       return;
     }
 
-    updateTransform();
-
     const rect = elemParentRelativeRect(itemRef);
 
-    const check = (idx: number) => {
+    const checkMove = (idx: number) => {
       const entry = sortable.itemEntries.get(sortable.props.each[idx]!)!;
       const testRect =
         entry.animationController?.layoutParentRelativeRect() ??
@@ -209,10 +209,10 @@ function handleDrag<T>(
     let forward = currentIdx + 1;
 
     while (backward >= 0 || forward < sortable.props.each.length) {
-      if (backward >= 0 && check(backward)) {
+      if (backward >= 0 && checkMove(backward)) {
         break;
       }
-      if (forward < sortable.props.each.length && check(forward)) {
+      if (forward < sortable.props.each.length && checkMove(forward)) {
         break;
       }
 
@@ -221,23 +221,41 @@ function handleDrag<T>(
     }
   };
 
+  const checkAndRunRemoveInsertHooks = () => {};
+
+  const updateTransformAndRunHooks = () => {
+    updateTransform();
+
+    if (insideSortable) {
+      checkAndRunMoveHook();
+    } else {
+      checkAndRunRemoveInsertHooks();
+    }
+  };
+
   const mouseMoveListener = (e: MouseEvent) => {
     mouseClientPosition = { x: e.clientX, y: e.clientY };
     updateMouseRelativePosition();
-    updateTransformAndDoMove();
+    updateTransformAndRunHooks();
   };
 
   const scrollListener = () => {
     updateMouseRelativePosition();
-    updateTransformAndDoMove();
+    updateTransformAndRunHooks();
   };
 
   const mouseUpListener = () => {
     if (sortable.props.onClick != null && !cancelClick) {
       sortable.props.onClick(startIdx);
-    } else {
+    } else if (startSortable == sortable) {
       sortable.props.onDragEnd?.(
         startIdx,
+        sortable.itemEntries.get(item)!.idx(),
+      );
+    } else {
+      startSortable.props.onDragEnd?.(startIdx, undefined);
+      sortable.props.onDragEnd?.(
+        undefined,
         sortable.itemEntries.get(item)!.idx(),
       );
     }
