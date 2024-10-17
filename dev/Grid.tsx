@@ -1,8 +1,14 @@
-import { Component, createEffect, createSignal } from "solid-js";
+import { Component, createSignal } from "solid-js";
 
-import { easeOutQuad, move, Sortable } from "../src";
+import {
+  createSortableGroupContext,
+  easeOutQuad,
+  defaultMutationEventListeners,
+  Sortable,
+  SortableGroupContext,
+} from "../src";
 
-export function getRandomColor() {
+export function randomColor() {
   var letters = "0123456789ABCDEF";
   var color = "#";
   for (var i = 0; i < 6; i++) {
@@ -11,14 +17,25 @@ export function getRandomColor() {
   return color;
 }
 
+const ExampleGroupContext = createSortableGroupContext<number>();
+
+const N = 5;
+
 export const GridPage: Component = () => {
   const [elements, setElements] = createSignal<ReadonlyArray<number>>(
-    Array.from(Array(200).keys()),
+    Array.from(Array(N).keys()),
   );
+  const [elements2, setElements2] = createSignal<ReadonlyArray<number>>(
+    Array.from(Array(N).keys()).map((i) => i + N),
+  );
+  const [elements3, setElements3] = createSignal<ReadonlyArray<number>>(
+    Array.from(Array(N).keys()).map((i) => i + N * 2),
+  );
+
   const [largeGap, setLargeGap] = createSignal(false);
 
   return (
-    <>
+    <div>
       <button
         onClick={() => {
           setElements((arr) => [
@@ -40,7 +57,8 @@ export const GridPage: Component = () => {
         onClick={() => {
           setElements((arr) => [
             ...arr,
-            arr.reduce((v1, v2) => Math.max(v1, v2), 0) + 1,
+            [...arr, ...elements2()].reduce((v1, v2) => Math.max(v1, v2), 0) +
+              1,
           ]);
         }}
       >
@@ -56,25 +74,15 @@ export const GridPage: Component = () => {
       <button onClick={() => setLargeGap((v) => !v)}>Gap</button>
 
       <div
-        draggable={false}
         style={{
-          padding: "20px",
-          display: "grid",
-          gap: largeGap() ? "50px" : "20px",
-          "grid-template-columns": "repeat(auto-fill, 150px)",
-          "justify-content": "center",
-          "user-select": "none",
+          display: "flex",
+          gap: "40px",
         }}
       >
-        <Sortable
-          each={elements()}
-          onMove={(from, to) => setElements((arr) => move(arr, from, to))}
-          animated={elements().length <= 200}
-          animationDurationMs={250}
-          timingFunction={easeOutQuad}
-        >
-          {({ item, isMouseDown }) => {
-            const color = getRandomColor();
+        <SortableGroupContext
+          context={ExampleGroupContext}
+          render={({ item, isMouseDown }) => {
+            const color = randomColor();
             return (
               <div
                 draggable={false}
@@ -91,8 +99,101 @@ export const GridPage: Component = () => {
               </div>
             );
           }}
-        </Sortable>
+        >
+          <div
+            draggable={false}
+            style={{
+              padding: "20px",
+              display: "grid",
+              gap: largeGap() ? "50px" : "20px",
+              "grid-template-columns": "repeat(auto-fill, 150px)",
+              "justify-content": "center",
+              "user-select": "none",
+              "flex-grow": "1",
+              "min-width": "100px",
+              "min-height": "100px",
+              "background-color": "lightblue",
+            }}
+          >
+            <Sortable
+              group={ExampleGroupContext}
+              each={elements()}
+              {...defaultMutationEventListeners(setElements)}
+              onClick={(idx) => console.log("clicked: ", elements()[idx])}
+              animated={elements2().length <= 200}
+              animationDurationMs={250}
+              timingFunction={easeOutQuad}
+            />
+          </div>
+          <div
+            draggable={false}
+            style={{
+              padding: "20px",
+              display: "grid",
+              gap: largeGap() ? "50px" : "20px",
+              "grid-template-columns": "repeat(auto-fill, 150px)",
+              "justify-content": "center",
+              "user-select": "none",
+              "flex-grow": "1",
+              "min-width": "100px",
+              "min-height": "100px",
+              "background-color": "lightblue",
+            }}
+          >
+            <Sortable
+              group={ExampleGroupContext}
+              each={elements2()}
+              {...defaultMutationEventListeners(setElements2)}
+              animated={elements().length <= 200}
+              animationDurationMs={250}
+              timingFunction={easeOutQuad}
+            />
+          </div>
+          <div
+            draggable={false}
+            style={{
+              padding: "20px",
+              display: "grid",
+              gap: largeGap() ? "50px" : "20px",
+              "grid-template-columns": "repeat(auto-fill, 150px)",
+              "justify-content": "center",
+              "user-select": "none",
+              "flex-grow": "1",
+              "min-width": "100px",
+              "min-height": "100px",
+              "background-color": "lightblue",
+            }}
+          >
+            <Sortable
+              group={ExampleGroupContext}
+              each={elements3()}
+              {...defaultMutationEventListeners(setElements3)}
+              animated={elements().length <= 200}
+              animationDurationMs={250}
+              timingFunction={easeOutQuad}
+            >
+              {({ item, isMouseDown }) => {
+                const color = randomColor();
+                return (
+                  <div
+                    draggable={false}
+                    style={{
+                      height: "100px",
+                      "background-color": color,
+                      color: "black",
+                      border: isMouseDown()
+                        ? "2px solid blue"
+                        : "2px solid transparent",
+                    }}
+                  >
+                    {item}
+                  </div>
+                );
+              }}
+            </Sortable>
+          </div>
+        </SortableGroupContext>
       </div>
-    </>
+    </div>
   );
 };

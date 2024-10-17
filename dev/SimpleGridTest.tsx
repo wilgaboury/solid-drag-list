@@ -1,5 +1,5 @@
 import { createSortableAnimationController } from "../src/animation";
-import { getRandomColor } from "./Grid";
+import { randomColor } from "./Grid";
 import { onMount } from "solid-js";
 
 export function SimpleGridTest() {
@@ -21,7 +21,7 @@ export function SimpleGridTest() {
         return (
           <div
             style={{
-              "background-color": getRandomColor(),
+              "background-color": randomColor(),
               height: "100px",
             }}
             ref={ref}

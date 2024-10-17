@@ -1,3 +1,3 @@
 export * from "./timing";
 export * from "./Sortable";
-export { move, splice } from "./util";
+export { move, splice, defaultMutationEventListeners } from "./util";

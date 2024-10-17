@@ -1,4 +1,6 @@
-import { createSignal } from "solid-js";
+import { Setter, createSignal } from "solid-js";
+
+import { SortableCallbacks } from "./Sortable";
 
 /**
  * mod but the result is always positive
@@ -106,5 +108,15 @@ export function createSetSignal<T>(init?: ReadonlyArray<T>): SetSignal<T> {
       apply(set);
       dirty();
     },
+  };
+}
+
+export function defaultMutationEventListeners<T>(
+  set: Setter<ReadonlyArray<T>>,
+): Partial<SortableCallbacks<T>> {
+  return {
+    onMove: (from, to) => set((arr) => move(arr, from, to)),
+    onInsert: (item, idx) => set((arr) => arr.toSpliced(idx, 0, item)),
+    onRemove: (idx) => set((arr) => arr.toSpliced(idx, 1)),
   };
 }

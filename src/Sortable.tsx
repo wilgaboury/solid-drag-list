@@ -10,6 +10,7 @@ import {
   createContext,
   createEffect,
   createMemo,
+  createRoot,
   createSelector,
   createSignal,
   getOwner,
@@ -19,6 +20,7 @@ import {
   onMount,
   runWithOwner,
   splitProps,
+  untrack,
   useContext,
 } from "solid-js";
 
@@ -28,9 +30,7 @@ import {
 } from "./animation";
 import {
   Position,
-  Rect,
   area,
-  clientToPage,
   clientToRelative,
   dist,
   elemClientRect,
@@ -88,27 +88,21 @@ function calculateRelativePercentPosition(e: MouseEvent): Position {
 
 function handleDrag<T>(
   initialMouseEvent: MouseEvent,
-  sortable: SortableRef<T>,
+  initialSortable: SortableRef<T>,
   group: SortableGroup<T> | undefined,
   dragState: DragState<T>,
   item: T,
 ) {
-  const cleanupGlobalCursorGrabbingStyle = addGlobalCursorGrabbingStyle();
-  const getItemRef = () => sortable.itemEntries.get(item)?.state.ref();
+  const [sortable, setSortable] = createSignal<SortableRef<T>>(initialSortable);
 
-  // todo: this should be an effect in case item ref changes
-  {
-    const itemRef = getItemRef();
-    if (itemRef != null) {
-      itemRef.style.zIndex = "1";
-    }
-  }
+  let cleanupGlobalCursorGrabbingStyle: (() => void) | undefined;
+  const getItemRef = () => sortable().itemEntries.get(item)!.state.ref();
 
   const relativeMouseDownPercentPosition =
     calculateRelativePercentPosition(initialMouseEvent);
 
   const startSortable = sortable;
-  const startIdx = sortable.itemEntries.get(item)!.idx();
+  const startIdx = sortable().itemEntries.get(item)!.idx();
 
   let mouseClientPosition: Position = {
     x: initialMouseEvent.x,
@@ -116,42 +110,65 @@ function handleDrag<T>(
   };
   let mouseRelativePosition: Position = clientToRelative(
     mouseClientPosition,
-    sortable.parent,
+    sortable().parent,
   );
   let mouseMoveDistance: number = 0;
-  let initialMouseDownTime = Date.now();
+  const initialMouseDownTime = Date.now();
   let cancelClick = false;
 
   let itemRelativeDragPosition: Position = elemParentRelativeRect(
-    sortable.itemEntries.get(item)!.state.ref(),
+    sortable().itemEntries.get(item)!.state.ref(),
   );
 
   let insideSortable = true;
 
+  createEffect(() => (getItemRef().style.zIndex = "1"));
+  createEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.length > 0) {
+          if (entries[0]?.isIntersecting) {
+            insideSortable = true;
+          } else {
+            insideSortable = false;
+          }
+        }
+      },
+      {
+        root: sortable().parent,
+        threshold: sortable().props.moveThreshhold,
+      },
+    );
+    createEffect(() => {
+      const itemRef = getItemRef();
+      observer.observe(itemRef);
+      onCleanup(() => observer.unobserve(itemRef));
+    });
+    onCleanup(() => observer.disconnect());
+  });
+
   const updateMouseRelativePosition = () => {
     const newMouseRelativePosition: Position = clientToRelative(
       mouseClientPosition,
-      sortable.parent,
+      sortable().parent,
     );
     mouseMoveDistance += dist(mouseRelativePosition, newMouseRelativePosition);
     mouseRelativePosition = newMouseRelativePosition;
 
     if (
       !cancelClick &&
-      (mouseMoveDistance > sortable.props.clickThreshholdDistancePx ||
+      (mouseMoveDistance > sortable().props.clickThreshholdDistancePx ||
         Date.now() - initialMouseDownTime >
-          sortable.props.clickThresholdDurationMs)
+          sortable().props.clickThresholdDurationMs)
     ) {
-      sortable.props.onDragStart?.(startIdx);
+      cancelClick = true;
+      sortable().props.onDragStart?.(startIdx);
+      cleanupGlobalCursorGrabbingStyle = addGlobalCursorGrabbingStyle();
     }
   };
 
   const updateTransform = () => {
     const itemRef = getItemRef();
-
-    if (itemRef == null || mouseClientPosition == null) {
-      return;
-    }
 
     itemRef.style.transform = "";
 
@@ -174,17 +191,18 @@ function handleDrag<T>(
     itemRef.style.transform = `translate(${layoutRelativePosition.x}px, ${layoutRelativePosition.y}px)`;
   };
 
-  const checkAndRunMoveHook = () => {
+  const checkMove = (sortable: SortableRef<T>) => {
     const itemRef = getItemRef();
 
-    if (itemRef == null) {
-      return;
-    }
+    const rect = clientToRelative(elemClientRect(itemRef), sortable.parent);
 
-    const rect = elemParentRelativeRect(itemRef);
+    for (let i = 0; i < sortable.props.each.length; i++) {
+      const entryItem = sortable.props.each[i]!;
+      if (entryItem == item) {
+        continue;
+      }
 
-    const checkMove = (idx: number) => {
-      const entry = sortable.itemEntries.get(sortable.props.each[idx]!)!;
+      const entry = sortable.itemEntries.get(entryItem)!;
       const testRect =
         entry.animationController?.layoutParentRelativeRect() ??
         elemParentRelativeRect(entry.state.ref());
@@ -193,41 +211,84 @@ function handleDrag<T>(
       if (intersect != null) {
         const a = area(intersect);
         const percent = Math.max(a / area(rect), a / area(testRect));
-        if (percent > 0.5) {
-          cancelClick = true;
-          sortable.props.onMove?.(sortable.itemEntries.get(item)!.idx(), idx);
-          updateTransform();
-          return true;
+        if (percent > sortable.props.moveThreshhold) {
+          return i;
         }
       }
-      return false;
-    };
-
-    // search outward from current position, should result in less comparisons than a typical linear search when there is a match
-    const currentIdx = sortable.itemEntries.get(item)!.idx();
-    let backward = currentIdx - 1;
-    let forward = currentIdx + 1;
-
-    while (backward >= 0 || forward < sortable.props.each.length) {
-      if (backward >= 0 && checkMove(backward)) {
-        break;
-      }
-      if (forward < sortable.props.each.length && checkMove(forward)) {
-        break;
-      }
-
-      backward--;
-      forward++;
     }
+
+    return -1;
   };
 
-  const checkAndRunRemoveInsertHooks = () => {};
+  const checkAndRunRemoveInsertHooks = () => {
+    if (group == null || group.sortables.size <= 1) {
+      return;
+    }
+
+    const itemRef = getItemRef();
+
+    const rect = elemClientRect(itemRef);
+    let greatestSortable: SortableRef<T> | undefined = undefined;
+    let greatestSortableIntersectionArea = 0;
+
+    for (const otherSortable of group.sortables) {
+      if (sortable() == otherSortable) {
+        continue;
+      }
+
+      const currentIntersection = intersection(
+        elemClientRect(otherSortable.parent),
+        rect,
+      );
+      const currentIntersectionArea =
+        currentIntersection != null ? area(currentIntersection) : 0;
+
+      if (currentIntersectionArea > greatestSortableIntersectionArea) {
+        greatestSortable = otherSortable;
+        greatestSortableIntersectionArea = currentIntersectionArea;
+      }
+    }
+
+    if (greatestSortable != null) {
+      let idx = checkMove(greatestSortable);
+      if (
+        idx < 0 &&
+        greatestSortableIntersectionArea / area(rect) >
+          greatestSortable.props.moveThreshhold
+      ) {
+        idx = greatestSortable.props.each.length;
+      }
+
+      if (idx >= 0) {
+        sortable().props.onRemove?.(sortable().itemEntries.get(item)!.idx());
+        if (sortable().itemEntries.has(item)) {
+          return;
+        }
+
+        batch(() => {
+          greatestSortable.props.onInsert?.(item, idx);
+          if (greatestSortable.props.each.includes(item)) {
+            setSortable(greatestSortable);
+          } else {
+            dragEnd();
+            group.itemEntries.get(item)?.dispose();
+            group.itemEntries.delete(item);
+          }
+        });
+      }
+    }
+  };
 
   const updateTransformAndRunHooks = () => {
     updateTransform();
 
     if (insideSortable) {
-      checkAndRunMoveHook();
+      const idx = checkMove(sortable());
+      if (idx >= 0) {
+        cancelClick = true;
+        sortable().props.onMove?.(sortable().itemEntries.get(item)!.idx(), idx);
+        updateTransform();
+      }
     } else {
       checkAndRunRemoveInsertHooks();
     }
@@ -245,18 +306,18 @@ function handleDrag<T>(
   };
 
   const mouseUpListener = () => {
-    if (sortable.props.onClick != null && !cancelClick) {
-      sortable.props.onClick(startIdx);
+    if (sortable().props.onClick != null && !cancelClick) {
+      sortable().props.onClick!(startIdx);
     } else if (startSortable == sortable) {
-      sortable.props.onDragEnd?.(
+      sortable().props.onDragEnd?.(
         startIdx,
-        sortable.itemEntries.get(item)!.idx(),
+        sortable().itemEntries.get(item)!.idx(),
       );
     } else {
-      startSortable.props.onDragEnd?.(startIdx, undefined);
-      sortable.props.onDragEnd?.(
+      initialSortable.props.onDragEnd?.(startIdx, undefined);
+      sortable().props.onDragEnd?.(
         undefined,
-        sortable.itemEntries.get(item)!.idx(),
+        sortable().itemEntries.get(item)!.idx(),
       );
     }
 
@@ -264,25 +325,21 @@ function handleDrag<T>(
   };
 
   const dragEnd = () => {
-    const controller = sortable.itemEntries.get(item)?.animationController;
+    const controller = sortable().itemEntries.get(item)?.animationController;
     const itemRef = getItemRef();
     if (controller != null) {
-      controller.start(itemRelativeDragPosition).then(() => {
-        if (itemRef != null) {
-          itemRef.style.zIndex = "0";
-        }
-      });
+      controller
+        .start(itemRelativeDragPosition)
+        .then(() => (itemRef.style.zIndex = "0"));
     } else {
-      if (itemRef != null) {
-        itemRef.style.transform = "";
-      }
+      itemRef.style.transform = "";
     }
 
     dragState.setDragging(undefined);
     document.removeEventListener("mousemove", mouseMoveListener);
     document.removeEventListener("scroll", scrollListener);
     document.removeEventListener("mouseup", mouseUpListener);
-    cleanupGlobalCursorGrabbingStyle();
+    cleanupGlobalCursorGrabbingStyle?.();
   };
 
   document.addEventListener("mousemove", mouseMoveListener);
@@ -341,34 +398,44 @@ function createSortableGroup<T>(
     owner: getOwner(),
     itemEntries,
     render: ({ item, idx, isMouseDown }) => {
-      let entry = itemEntries.get(item);
-      if (entry == null) {
-        const [entryIdx, setEntryIdx] = createSignal(idx);
-        const [entryIsMouseDown, setEntryIsMouseDown] =
-          createSignal(isMouseDown);
-
-        entry = {
-          // TODO: actually use render function and set dispose correctly
-          state: {
-            ref: () => document.createElement("div"),
-            resolved: children(() => <></>),
-            handleRefs: createSetSignal(),
-          },
-          dispose: () => {},
-          idx: () => entryIdx()(),
-          setIdx: setEntryIdx,
-          isMouseDown: () => entryIsMouseDown()(),
-          setIsMouseDown: setEntryIsMouseDown,
-        };
-        itemEntries.set(item, entry);
-      } else {
-        batch(() => {
-          entry!.setIdx(idx);
-          entry!.setIsMouseDown(isMouseDown);
-        });
+      if (render == null) {
+        throw new Error("render function missing");
       }
 
-      return entry;
+      const entry = itemEntries.get(item);
+      if (entry == null) {
+        const createEntry: GroupItemEntry = createRoot((dispose) => {
+          const [entryIdx, setEntryIdx] = createSignal<Accessor<number>>(idx);
+          const [entryIsMouseDown, setEntryIsMouseDown] =
+            createSignal<Accessor<boolean>>(isMouseDown);
+
+          return {
+            state: createState(
+              () =>
+                render({
+                  item,
+                  idx: () => entryIdx()(),
+                  isMouseDown: () => entryIsMouseDown()(),
+                }),
+              untrack(isMouseDown),
+            ),
+            dispose,
+            idx: () => entryIdx()(),
+            setIdx: (signal) => setEntryIdx(() => signal),
+            isMouseDown: () => entryIsMouseDown()(),
+            setIsMouseDown: (signal) => setEntryIsMouseDown(() => signal),
+          };
+        });
+        itemEntries.set(item, createEntry);
+        return createEntry;
+      } else {
+        entry.state.ref().style.opacity = "0";
+        batch(() => {
+          entry.setIdx(idx);
+          entry.setIsMouseDown(isMouseDown);
+        });
+        return entry;
+      }
     },
   };
 }
@@ -379,7 +446,7 @@ export function createSortableGroupContext<T>() {
 
 export function SortableGroupContext<T>(
   props: {
-    readonly context: Context<SortableGroup<T>>;
+    readonly context: Context<SortableGroup<T> | undefined>;
     readonly render?: (props: SortableItemProps<T>) => JSX.Element;
     readonly children: JSX.Element;
   } & InheritableSortableProps,
@@ -393,7 +460,7 @@ export function SortableGroupContext<T>(
   );
 }
 
-interface SortableHooks<T> {
+export interface SortableCallbacks<T> {
   readonly onClick?: (idx: number) => void;
   readonly onDragStart?: (idx: number) => void;
   readonly onDragEnd?: (
@@ -402,7 +469,7 @@ interface SortableHooks<T> {
   ) => void;
   readonly onMove?: (fromIdx: number, toIdx: number) => void;
   readonly onRemove?: (idx: number) => void;
-  readonly onInsert?: (idx: number) => void;
+  readonly onInsert?: (item: T, idx: number) => void;
   readonly onHoldOver?: (fromIdx: number, toIdx: number) => void;
 }
 
@@ -427,10 +494,12 @@ const defaultInheritableSortableProps = {
   clickThreshholdDistancePx: 8,
 };
 
-interface SortableProps<T> extends InheritableSortableProps, SortableHooks<T> {
+interface SortableProps<T>
+  extends InheritableSortableProps,
+    SortableCallbacks<T> {
   readonly each: ReadonlyArray<T>;
 
-  readonly group?: Context<SortableGroup<T>>; // non-reactive
+  readonly group?: Context<SortableGroup<T> | undefined>; // non-reactive
 
   readonly shouldInsert?: (item: T) => boolean;
 }
@@ -497,44 +566,17 @@ export function Sortable<T, U extends JSX.Element>(
         {(item, idx) => {
           const isMouseDown = createMemo(() => isMouseDownSelector(item));
 
-          const createState = () => {
-            const handleRefs = createSetSignal<HTMLElement>();
-
-            const resolved = children(() => (
-              <SortableDirectiveContext.Provider value={handleRefs}>
-                {resolvedProps.children?.({
-                  item,
-                  idx,
-                  isMouseDown,
-                })}
-              </SortableDirectiveContext.Provider>
-            ));
-
-            const ref = createMemo(
-              on(
-                () => resolved.toArray(),
-                (arr) => {
-                  if (arr[0] instanceof HTMLElement) {
-                    arr[0].style.position = "relative";
-                    arr[0].style.zIndex = "0";
-                    return arr[0];
-                  } else {
-                    throw Error("sortable child did not resolve to a DOM node");
-                  }
-                },
-              ),
-            );
-
-            return {
-              ref,
-              resolved,
-              handleRefs,
-            };
-          };
+          // this is janky because it can cause a frame of transparency
+          onMount(() => {
+            setTimeout(() => (state.ref().style.opacity = "1"));
+          });
 
           const state =
             resolvedProps.children != null || group == null
-              ? createState()
+              ? createState(
+                  () => resolvedProps.children!({ item, idx, isMouseDown }),
+                  untrack(isMouseDown),
+                )
               : group.render({ item, idx, isMouseDown }).state;
 
           const entry: ItemEntry = {
@@ -543,7 +585,18 @@ export function Sortable<T, U extends JSX.Element>(
           };
 
           itemEntries.set(item, entry);
-          onCleanup(() => itemEntries.delete(item));
+          onCleanup(() => {
+            itemEntries.delete(item);
+            if (
+              !isMouseDown() &&
+              group != null &&
+              group.itemEntries.has(item)
+            ) {
+              console.log("disposing");
+              group.itemEntries.get(item)?.dispose();
+              group.itemEntries.delete(item);
+            }
+          });
 
           const animatedMemo = createMemo(() => resolvedProps.animated);
           createEffect(() => {
@@ -605,4 +658,42 @@ export function Sortable<T, U extends JSX.Element>(
       </For>
     </>
   );
+}
+
+function createState(
+  render: () => JSX.Element,
+  isMouseDown: boolean,
+): ItemState {
+  const handleRefs = createSetSignal<HTMLElement>();
+
+  const resolved = children(() => (
+    <SortableDirectiveContext.Provider value={handleRefs}>
+      {render()}
+    </SortableDirectiveContext.Provider>
+  ));
+
+  const ref = createMemo(
+    on(
+      () => resolved.toArray(),
+      (arr) => {
+        if (arr[0] instanceof HTMLElement) {
+          arr[0].style.position = "relative";
+          arr[0].style.zIndex = "0";
+          return arr[0];
+        } else {
+          throw Error("sortable child did not resolve to a DOM node");
+        }
+      },
+    ),
+  );
+
+  if (isMouseDown) {
+    ref().style.opacity = "0";
+  }
+
+  return {
+    ref,
+    resolved,
+    handleRefs,
+  };
 }
