@@ -76,8 +76,10 @@ export function sortableHandle(el: Element, _accessor: () => any) {
   }
 }
 
-function calculateRelativePercentPosition(e: MouseEvent): Position {
-  const target = e.currentTarget as HTMLElement;
+function calculateRelativePercentPosition(
+  e: MouseEvent,
+  target: HTMLElement,
+): Position {
   const clientRect = elemClientRect(target);
   const relativeMousePos = clientToRelative({ x: e.x, y: e.y }, target);
   return {
@@ -98,8 +100,10 @@ function handleDrag<T>(
   let cleanupGlobalCursorGrabbingStyle: (() => void) | undefined;
   const getItemRef = () => sortable().itemEntries.get(item)!.state.ref();
 
-  const relativeMouseDownPercentPosition =
-    calculateRelativePercentPosition(initialMouseEvent);
+  const relativeMouseDownPercentPosition = calculateRelativePercentPosition(
+    initialMouseEvent,
+    getItemRef(),
+  );
 
   const startSortable = sortable;
   const startIdx = sortable().itemEntries.get(item)!.idx();

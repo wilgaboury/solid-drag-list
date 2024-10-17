@@ -6,7 +6,10 @@ import {
   defaultMutationEventListeners,
   Sortable,
   SortableGroupContext,
+  sortableHandle,
 } from "../src";
+
+sortableHandle;
 
 export function randomColor() {
   var letters = "0123456789ABCDEF";
@@ -87,6 +90,7 @@ export const GridPage: Component = () => {
               <div
                 draggable={false}
                 style={{
+                  position: "relative",
                   height: "100px",
                   "background-color": color,
                   color: "black",
@@ -96,6 +100,30 @@ export const GridPage: Component = () => {
                 }}
               >
                 {item}
+                <div
+                  use:sortableHandle
+                  style={{
+                    position: "absolute",
+                    height: "15px",
+                    width: "15px",
+                    top: "25px",
+                    left: "25px",
+                    "background-color": "black",
+                    cursor: "grab",
+                  }}
+                />
+                <div
+                  use:sortableHandle
+                  style={{
+                    position: "absolute",
+                    height: "15px",
+                    width: "15px",
+                    top: "50px",
+                    left: "50px",
+                    "background-color": "black",
+                    cursor: "grab",
+                  }}
+                />
               </div>
             );
           }}
