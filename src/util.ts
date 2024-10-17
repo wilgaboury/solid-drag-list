@@ -1,3 +1,7 @@
+import { Setter, createSignal } from "solid-js";
+
+import { SortableCallbacks } from "./Sortable";
+
 /**
  * mod but the result is always positive
  */
@@ -82,4 +86,37 @@ export function zip<A, B>(
     ret.push([a[i]!, b[i]!]);
   }
   return ret;
+}
+
+export type SetSignal<T> = {
+  readonly get: () => ReadonlySet<T>;
+  readonly mutate: (apply: (set: Set<T>) => any) => void;
+};
+
+export function createSetSignal<T>(init?: ReadonlyArray<T>): SetSignal<T> {
+  const [track, dirty] = createSignal(undefined, {
+    equals: false,
+  });
+
+  const set = new Set<T>(init);
+  return {
+    get: () => {
+      track();
+      return set as ReadonlySet<T>;
+    },
+    mutate: (apply: (set: Set<T>) => any) => {
+      apply(set);
+      dirty();
+    },
+  };
+}
+
+export function defaultMutationEventListeners<T>(
+  set: Setter<ReadonlyArray<T>>,
+): Partial<SortableCallbacks<T>> {
+  return {
+    onMove: (from, to) => set((arr) => move(arr, from, to)),
+    onInsert: (item, idx) => set((arr) => arr.toSpliced(idx, 0, item)),
+    onRemove: (idx) => set((arr) => arr.toSpliced(idx, 1)),
+  };
 }
