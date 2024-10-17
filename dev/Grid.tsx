@@ -60,8 +60,10 @@ export const GridPage: Component = () => {
         onClick={() => {
           setElements((arr) => [
             ...arr,
-            [...arr, ...elements2()].reduce((v1, v2) => Math.max(v1, v2), 0) +
-              1,
+            [...arr, ...elements2(), ...elements3()].reduce(
+              (v1, v2) => Math.max(v1, v2),
+              0,
+            ) + 1,
           ]);
         }}
       >
