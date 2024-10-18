@@ -279,6 +279,9 @@ function handleDrag<T>(
             group.itemEntries.delete(item);
           }
         });
+
+        updateMouseRelativePosition(); // this call will cause a large jump in distance travelled, which shouldn't matter at this point in the drag but should get fixed at some point
+        updateTransform();
       }
     }
   };
@@ -433,7 +436,6 @@ function createSortableGroup<T>(
         itemEntries.set(item, createEntry);
         return createEntry;
       } else {
-        entry.state.ref().style.opacity = "0";
         batch(() => {
           entry.setIdx(idx);
           entry.setIsMouseDown(isMouseDown);
@@ -570,11 +572,6 @@ export function Sortable<T, U extends JSX.Element>(
         {(item, idx) => {
           const isMouseDown = createMemo(() => isMouseDownSelector(item));
 
-          // this is janky because it can cause a frame of transparency
-          onMount(() => {
-            setTimeout(() => (state.ref().style.opacity = "1"));
-          });
-
           const state =
             resolvedProps.children != null || group == null
               ? createState(
@@ -596,7 +593,6 @@ export function Sortable<T, U extends JSX.Element>(
               group != null &&
               group.itemEntries.has(item)
             ) {
-              console.log("disposing");
               group.itemEntries.get(item)?.dispose();
               group.itemEntries.delete(item);
             }
@@ -690,10 +686,6 @@ function createState(
       },
     ),
   );
-
-  if (isMouseDown) {
-    ref().style.opacity = "0";
-  }
 
   return {
     ref,

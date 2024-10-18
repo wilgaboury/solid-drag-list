@@ -2,11 +2,11 @@ import { Component, createSignal } from "solid-js";
 
 import {
   createSortableGroupContext,
-  easeOutQuad,
   defaultMutationEventListeners,
   Sortable,
   SortableGroupContext,
   sortableHandle,
+  easeOutCirc,
 } from "../src";
 
 sortableHandle;
@@ -81,11 +81,15 @@ export const GridPage: Component = () => {
       <div
         style={{
           display: "flex",
+          "align-items": "start",
           gap: "40px",
         }}
       >
         <SortableGroupContext
           context={ExampleGroupContext}
+          animated={elements().length <= 200}
+          animationDurationMs={250}
+          timingFunction={easeOutCirc}
           render={({ item, isMouseDown }) => {
             const color = randomColor();
             return (
@@ -149,10 +153,6 @@ export const GridPage: Component = () => {
               group={ExampleGroupContext}
               each={elements()}
               {...defaultMutationEventListeners(setElements)}
-              onClick={(idx) => console.log("clicked: ", elements()[idx])}
-              animated={elements2().length <= 200}
-              animationDurationMs={250}
-              timingFunction={easeOutQuad}
             />
           </div>
           <div
@@ -174,9 +174,6 @@ export const GridPage: Component = () => {
               group={ExampleGroupContext}
               each={elements2()}
               {...defaultMutationEventListeners(setElements2)}
-              animated={elements().length <= 200}
-              animationDurationMs={250}
-              timingFunction={easeOutQuad}
             />
           </div>
           <div
@@ -198,9 +195,6 @@ export const GridPage: Component = () => {
               group={ExampleGroupContext}
               each={elements3()}
               {...defaultMutationEventListeners(setElements3)}
-              animated={elements().length <= 200}
-              animationDurationMs={250}
-              timingFunction={easeOutQuad}
             >
               {({ item, isMouseDown }) => {
                 const color = randomColor();
