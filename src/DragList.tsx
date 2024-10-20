@@ -467,16 +467,19 @@ export function DragListGroupContext<T>(
   );
 }
 
-export interface DragListCallbacks<T> {
-  readonly onClick?: (idx: number) => void;
+export interface DragListMutationEvents<T> {
+  readonly onMove?: (fromIdx: number, toIdx: number) => void;
+  readonly onRemove?: (idx: number) => void;
+  readonly onInsert?: (item: T, idx: number) => void;
+}
+
+export interface DragListEvents<T> extends DragListMutationEvents<T> {
   readonly onDragStart?: (idx: number) => void;
   readonly onDragEnd?: (
     startIdx: number | undefined,
     endIdx: number | undefined,
   ) => void;
-  readonly onMove?: (fromIdx: number, toIdx: number) => void;
-  readonly onRemove?: (idx: number) => void;
-  readonly onInsert?: (item: T, idx: number) => void;
+  readonly onClick?: (idx: number) => void;
   readonly onHoldOver?: (fromIdx: number, toIdx: number) => void;
 }
 
@@ -501,9 +504,7 @@ const defaultInheritableProps = {
   clickThreshholdDistancePx: 8,
 };
 
-interface DragListProps<T>
-  extends InheritableDragListProps,
-    DragListCallbacks<T> {
+interface DragListProps<T> extends InheritableDragListProps, DragListEvents<T> {
   readonly each: ReadonlyArray<T>;
 
   readonly group?: Context<DragListGroup<T> | undefined>; // non-reactive

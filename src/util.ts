@@ -1,6 +1,6 @@
 import { Setter, createSignal } from "solid-js";
 
-import { DragListCallbacks } from "./DragList";
+import { DragListEvents, DragListMutationEvents } from "./DragList";
 
 /**
  * mod but the result is always positive
@@ -65,17 +65,6 @@ export function move<T>(
   return ret;
 }
 
-export function splice<T>(
-  arr: ReadonlyArray<T>,
-  index: number,
-  count: number,
-  ...items: T[]
-) {
-  const tmp = [...arr];
-  tmp.splice(index, count, ...items);
-  return tmp;
-}
-
 export function zip<A, B>(
   a: ReadonlyArray<A>,
   b: ReadonlyArray<B>,
@@ -112,11 +101,15 @@ export function createSetSignal<T>(init?: ReadonlyArray<T>): SetSignal<T> {
 }
 
 export function defaultMutationEventListeners<T>(
-  set: Setter<ReadonlyArray<T>>,
-): Partial<DragListCallbacks<T>> {
+  set: Setter<Array<T>> | Setter<ReadonlyArray<T>>,
+): DragListMutationEvents<T> {
+  const setAny = set as any;
   return {
-    onMove: (from, to) => set((arr) => move(arr, from, to)),
-    onInsert: (item, idx) => set((arr) => arr.toSpliced(idx, 0, item)),
-    onRemove: (idx) => set((arr) => arr.toSpliced(idx, 1)),
+    onMove: (from, to) =>
+      setAny((arr: Array<T> | ReadonlyArray<T>) => move(arr, from, to)),
+    onInsert: (item, idx) =>
+      setAny((arr: Array<T> | ReadonlyArray<T>) => arr.toSpliced(idx, 0, item)),
+    onRemove: (idx) =>
+      setAny((arr: Array<T> | ReadonlyArray<T>) => arr.toSpliced(idx, 1)),
   };
 }
