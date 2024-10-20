@@ -6,7 +6,7 @@ import { SimpleGridTest } from "./SimpleGridTest";
 declare module "solid-js" {
   namespace JSX {
     interface Directives {
-      sortableHandle: boolean;
+      dragHandle: boolean;
     }
   }
 }

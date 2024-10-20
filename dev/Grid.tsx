@@ -1,15 +1,15 @@
 import { Component, createSignal } from "solid-js";
 
 import {
-  createSortableGroupContext,
+  createDragListGroupContext,
   defaultMutationEventListeners,
-  Sortable,
-  SortableGroupContext,
-  sortableHandle,
+  DragList,
+  DragListGroupContext,
+  dragHandle,
   easeOutCirc,
 } from "../src";
 
-sortableHandle;
+dragHandle;
 
 export function randomColor() {
   var letters = "0123456789ABCDEF";
@@ -20,7 +20,7 @@ export function randomColor() {
   return color;
 }
 
-const ExampleGroupContext = createSortableGroupContext<number>();
+const ExampleGroupContext = createDragListGroupContext<number>();
 
 const N = 5;
 
@@ -85,7 +85,7 @@ export const GridPage: Component = () => {
           gap: "40px",
         }}
       >
-        <SortableGroupContext
+        <DragListGroupContext
           context={ExampleGroupContext}
           animated={elements().length <= 200}
           animationDurationMs={250}
@@ -107,7 +107,7 @@ export const GridPage: Component = () => {
               >
                 {item}
                 <div
-                  use:sortableHandle
+                  use:dragHandle
                   style={{
                     position: "absolute",
                     height: "15px",
@@ -119,7 +119,7 @@ export const GridPage: Component = () => {
                   }}
                 />
                 <div
-                  use:sortableHandle
+                  use:dragHandle
                   style={{
                     position: "absolute",
                     height: "15px",
@@ -149,7 +149,7 @@ export const GridPage: Component = () => {
               "background-color": "lightblue",
             }}
           >
-            <Sortable
+            <DragList
               group={ExampleGroupContext}
               each={elements()}
               {...defaultMutationEventListeners(setElements)}
@@ -170,7 +170,7 @@ export const GridPage: Component = () => {
               "background-color": "lightblue",
             }}
           >
-            <Sortable
+            <DragList
               group={ExampleGroupContext}
               each={elements2()}
               {...defaultMutationEventListeners(setElements2)}
@@ -191,7 +191,7 @@ export const GridPage: Component = () => {
               "background-color": "lightblue",
             }}
           >
-            <Sortable
+            <DragList
               group={ExampleGroupContext}
               each={elements3()}
               {...defaultMutationEventListeners(setElements3)}
@@ -214,9 +214,9 @@ export const GridPage: Component = () => {
                   </div>
                 );
               }}
-            </Sortable>
+            </DragList>
           </div>
-        </SortableGroupContext>
+        </DragListGroupContext>
       </div>
     </div>
   );

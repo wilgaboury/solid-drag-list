@@ -1,4 +1,4 @@
-import { createSortableAnimationController } from "../src/animation";
+import { createAnimationController } from "../src/animation";
 import { randomColor } from "./Grid";
 import { onMount } from "solid-js";
 
@@ -16,7 +16,7 @@ export function SimpleGridTest() {
       {Array.from(Array(20).keys()).map(() => {
         let ref!: HTMLDivElement;
         onMount(() => {
-          createSortableAnimationController(ref);
+          createAnimationController(ref);
         });
         return (
           <div

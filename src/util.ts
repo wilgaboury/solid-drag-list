@@ -1,6 +1,6 @@
 import { Setter, createSignal } from "solid-js";
 
-import { SortableCallbacks } from "./Sortable";
+import { DragListCallbacks } from "./DragList";
 
 /**
  * mod but the result is always positive
@@ -113,7 +113,7 @@ export function createSetSignal<T>(init?: ReadonlyArray<T>): SetSignal<T> {
 
 export function defaultMutationEventListeners<T>(
   set: Setter<ReadonlyArray<T>>,
-): Partial<SortableCallbacks<T>> {
+): Partial<DragListCallbacks<T>> {
   return {
     onMove: (from, to) => set((arr) => move(arr, from, to)),
     onInsert: (item, idx) => set((arr) => arr.toSpliced(idx, 0, item)),

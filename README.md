@@ -1,8 +1,8 @@
 <p>
-  <img width="100%" src="https://assets.solidjs.com/banner?type=solid-sortable&background=tiles&project=%20" alt="solid-sortable">
+  <img width="100%" src="https://assets.solidjs.com/banner?type=solid-drag-list&background=tiles&project=%20" alt="solid-drag-list">
 </p>
 
-# solid-sortable
+# solid-drag-list
 
 [![pnpm](https://img.shields.io/badge/maintained%20with-pnpm-cc00ff.svg?style=for-the-badge&logo=pnpm)](https://pnpm.io/)
 
@@ -15,17 +15,17 @@ currently undergoing rapid development, so I wouldn't reccomend using it for pro
 <!-- Install it:
 
 ```bash
-npm i solid-sortable
+npm i solid-drag-list
 # or
-yarn add solid-sortable
+yarn add solid-drag-list
 # or
-pnpm add solid-sortable
+pnpm add solid-drag-list
 ``` -->
 
 Use it:
 
 ```ts
-import { Sortable } from "solid-sortable";
+import { DragList } from "solid-drag-list";
 ```
 
 Add to project to use drag handle directive in typescript:
@@ -34,7 +34,7 @@ Add to project to use drag handle directive in typescript:
 declare module "solid-js" {
   namespace JSX {
     interface Directives {
-      sortableHandle: boolean;
+      dragHandle: boolean;
     }
   }
 }

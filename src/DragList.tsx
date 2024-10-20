@@ -24,10 +24,7 @@ import {
   useContext,
 } from "solid-js";
 
-import {
-  SortableAnimationController,
-  createSortableAnimationController,
-} from "./animation";
+import { AnimationController, createAnimationController } from "./animation";
 import {
   Position,
   area,
@@ -40,35 +37,33 @@ import {
 import { TimingFunction, linear } from "./timing";
 import { SetSignal, createSetSignal } from "./util";
 
-interface SortableRef<T> {
+interface DragListRef<T> {
   readonly parent: HTMLElement;
-  readonly props: SortableProps<T> & typeof defaultInheritableSortableProps;
+  readonly props: DragListProps<T> & typeof defaultInheritableProps;
   readonly itemEntries: Map<T, ItemEntry>;
 }
 
-export type SortableSet<T> = Set<SortableRef<T>>;
-
-interface SortableItemProps<T> {
+interface DragListRenderProps<T> {
   readonly item: T;
   readonly idx: Accessor<number>;
   readonly isMouseDown: Accessor<boolean>;
 }
 
-export function createSortableItemContext<T>() {
-  return createContext<SortableItemProps<T> | undefined>();
+export function createDragListRenderContext<T>() {
+  return createContext<DragListRenderProps<T> | undefined>();
 }
 
-const SortableDirectiveContext = createContext<SetSignal<HTMLElement>>();
+const DragListHandleContext = createContext<SetSignal<HTMLElement>>();
 
 /**
- * directive that can be used by adding attribute use:sortableHandle to JSX element
+ * directive that can be used by adding attribute use:dragHandle to JSX element
  */
-export function sortableHandle(el: Element, _accessor: () => any) {
-  const handleRefs = useContext(SortableDirectiveContext);
+export function dragHandle(el: Element, _accessor: () => any) {
+  const handleRefs = useContext(DragListHandleContext);
   if (handleRefs == null) {
-    console.error("sortable handle context could not be found");
+    console.error("drag handle context could not be found");
   } else if (!(el instanceof HTMLElement)) {
-    console.error("sortableHandle directive used on invalid element type");
+    console.error("dragHandle directive used on invalid element type");
   } else {
     el.style.cursor = "grab";
     handleRefs.mutate((set) => set.add(el));
@@ -90,23 +85,23 @@ function calculateRelativePercentPosition(
 
 function handleDrag<T>(
   initialMouseEvent: MouseEvent,
-  initialSortable: SortableRef<T>,
-  group: SortableGroup<T> | undefined,
+  initialDragList: DragListRef<T>,
+  group: DragListGroup<T> | undefined,
   dragState: DragState<T>,
   item: T,
 ) {
-  const [sortable, setSortable] = createSignal<SortableRef<T>>(initialSortable);
+  const [currentDragList, setCurrentDragList] =
+    createSignal<DragListRef<T>>(initialDragList);
 
   let cleanupGlobalCursorGrabbingStyle: (() => void) | undefined;
-  const getItemRef = () => sortable().itemEntries.get(item)!.state.ref();
+  const getItemRef = () => currentDragList().itemEntries.get(item)!.state.ref();
 
   const relativeMouseDownPercentPosition = calculateRelativePercentPosition(
     initialMouseEvent,
     getItemRef(),
   );
 
-  const startSortable = sortable;
-  const startIdx = sortable().itemEntries.get(item)!.idx();
+  const startIdx = currentDragList().itemEntries.get(item)!.idx();
 
   let mouseClientPosition: Position = {
     x: initialMouseEvent.x,
@@ -114,17 +109,17 @@ function handleDrag<T>(
   };
   let mouseRelativePosition: Position = clientToRelative(
     mouseClientPosition,
-    sortable().parent,
+    currentDragList().parent,
   );
   let mouseMoveDistance: number = 0;
   const initialMouseDownTime = Date.now();
   let cancelClick = false;
 
   let itemRelativeDragPosition: Position = elemParentRelativeRect(
-    sortable().itemEntries.get(item)!.state.ref(),
+    currentDragList().itemEntries.get(item)!.state.ref(),
   );
 
-  let insideSortable = true;
+  let insideDragList = true;
 
   createEffect(() => (getItemRef().style.zIndex = "1"));
   createEffect(() => {
@@ -132,15 +127,15 @@ function handleDrag<T>(
       (entries) => {
         if (entries.length > 0) {
           if (entries[0]?.isIntersecting) {
-            insideSortable = true;
+            insideDragList = true;
           } else {
-            insideSortable = false;
+            insideDragList = false;
           }
         }
       },
       {
-        root: sortable().parent,
-        threshold: sortable().props.moveThreshhold,
+        root: currentDragList().parent,
+        threshold: currentDragList().props.moveThreshhold,
       },
     );
     createEffect(() => {
@@ -154,19 +149,19 @@ function handleDrag<T>(
   const updateMouseRelativePosition = () => {
     const newMouseRelativePosition: Position = clientToRelative(
       mouseClientPosition,
-      sortable().parent,
+      currentDragList().parent,
     );
     mouseMoveDistance += dist(mouseRelativePosition, newMouseRelativePosition);
     mouseRelativePosition = newMouseRelativePosition;
 
     if (
       !cancelClick &&
-      (mouseMoveDistance > sortable().props.clickThreshholdDistancePx ||
+      (mouseMoveDistance > currentDragList().props.clickThreshholdDistancePx ||
         Date.now() - initialMouseDownTime >
-          sortable().props.clickThresholdDurationMs)
+          currentDragList().props.clickThresholdDurationMs)
     ) {
       cancelClick = true;
-      sortable().props.onDragStart?.(startIdx);
+      currentDragList().props.onDragStart?.(startIdx);
       cleanupGlobalCursorGrabbingStyle = addGlobalCursorGrabbingStyle();
     }
   };
@@ -195,18 +190,18 @@ function handleDrag<T>(
     itemRef.style.transform = `translate(${layoutRelativePosition.x}px, ${layoutRelativePosition.y}px)`;
   };
 
-  const checkMove = (sortable: SortableRef<T>) => {
+  const checkMove = (dragList: DragListRef<T>) => {
     const itemRef = getItemRef();
 
-    const rect = clientToRelative(elemClientRect(itemRef), sortable.parent);
+    const rect = clientToRelative(elemClientRect(itemRef), dragList.parent);
 
-    for (let i = 0; i < sortable.props.each.length; i++) {
-      const entryItem = sortable.props.each[i]!;
+    for (let i = 0; i < dragList.props.each.length; i++) {
+      const entryItem = dragList.props.each[i]!;
       if (entryItem == item) {
         continue;
       }
 
-      const entry = sortable.itemEntries.get(entryItem)!;
+      const entry = dragList.itemEntries.get(entryItem)!;
       const testRect =
         entry.animationController?.layoutParentRelativeRect() ??
         elemParentRelativeRect(entry.state.ref());
@@ -215,7 +210,7 @@ function handleDrag<T>(
       if (intersect != null) {
         const a = area(intersect);
         const percent = Math.max(a / area(rect), a / area(testRect));
-        if (percent > sortable.props.moveThreshhold) {
+        if (percent > dragList.props.moveThreshhold) {
           return i;
         }
       }
@@ -225,54 +220,56 @@ function handleDrag<T>(
   };
 
   const checkAndRunRemoveInsertHooks = () => {
-    if (group == null || group.sortables.size <= 1) {
+    if (group == null || group.members.size <= 1) {
       return;
     }
 
     const itemRef = getItemRef();
 
     const rect = elemClientRect(itemRef);
-    let greatestSortable: SortableRef<T> | undefined = undefined;
-    let greatestSortableIntersectionArea = 0;
+    let mostIntersecting: DragListRef<T> | undefined = undefined;
+    let mostIntersectingArea = 0;
 
-    for (const otherSortable of group.sortables) {
-      if (sortable() == otherSortable) {
+    for (const member of group.members) {
+      if (currentDragList() == member) {
         continue;
       }
 
       const currentIntersection = intersection(
-        elemClientRect(otherSortable.parent),
+        elemClientRect(member.parent),
         rect,
       );
       const currentIntersectionArea =
         currentIntersection != null ? area(currentIntersection) : 0;
 
-      if (currentIntersectionArea > greatestSortableIntersectionArea) {
-        greatestSortable = otherSortable;
-        greatestSortableIntersectionArea = currentIntersectionArea;
+      if (currentIntersectionArea > mostIntersectingArea) {
+        mostIntersecting = member;
+        mostIntersectingArea = currentIntersectionArea;
       }
     }
 
-    if (greatestSortable != null) {
-      let idx = checkMove(greatestSortable);
+    if (mostIntersecting != null) {
+      let idx = checkMove(mostIntersecting);
       if (
         idx < 0 &&
-        greatestSortableIntersectionArea / area(rect) >
-          greatestSortable.props.moveThreshhold
+        mostIntersectingArea / area(rect) >
+          mostIntersecting.props.moveThreshhold
       ) {
-        idx = greatestSortable.props.each.length;
+        idx = mostIntersecting.props.each.length;
       }
 
       if (idx >= 0) {
-        sortable().props.onRemove?.(sortable().itemEntries.get(item)!.idx());
-        if (sortable().itemEntries.has(item)) {
+        currentDragList().props.onRemove?.(
+          currentDragList().itemEntries.get(item)!.idx(),
+        );
+        if (currentDragList().itemEntries.has(item)) {
           return;
         }
 
         batch(() => {
-          greatestSortable.props.onInsert?.(item, idx);
-          if (greatestSortable.props.each.includes(item)) {
-            setSortable(greatestSortable);
+          mostIntersecting.props.onInsert?.(item, idx);
+          if (mostIntersecting.props.each.includes(item)) {
+            setCurrentDragList(mostIntersecting);
           } else {
             dragEnd();
             group.itemEntries.get(item)?.dispose();
@@ -289,11 +286,14 @@ function handleDrag<T>(
   const updateTransformAndRunHooks = () => {
     updateTransform();
 
-    if (insideSortable) {
-      const idx = checkMove(sortable());
+    if (insideDragList) {
+      const idx = checkMove(currentDragList());
       if (idx >= 0) {
         cancelClick = true;
-        sortable().props.onMove?.(sortable().itemEntries.get(item)!.idx(), idx);
+        currentDragList().props.onMove?.(
+          currentDragList().itemEntries.get(item)!.idx(),
+          idx,
+        );
         updateTransform();
       }
     } else {
@@ -313,18 +313,18 @@ function handleDrag<T>(
   };
 
   const mouseUpListener = () => {
-    if (sortable().props.onClick != null && !cancelClick) {
-      sortable().props.onClick!(startIdx);
-    } else if (startSortable == sortable) {
-      sortable().props.onDragEnd?.(
+    if (currentDragList().props.onClick != null && !cancelClick) {
+      currentDragList().props.onClick!(startIdx);
+    } else if (initialDragList == currentDragList()) {
+      currentDragList().props.onDragEnd?.(
         startIdx,
-        sortable().itemEntries.get(item)!.idx(),
+        currentDragList().itemEntries.get(item)!.idx(),
       );
     } else {
-      initialSortable.props.onDragEnd?.(startIdx, undefined);
-      sortable().props.onDragEnd?.(
+      initialDragList.props.onDragEnd?.(startIdx, undefined);
+      currentDragList().props.onDragEnd?.(
         undefined,
-        sortable().itemEntries.get(item)!.idx(),
+        currentDragList().itemEntries.get(item)!.idx(),
       );
     }
 
@@ -332,7 +332,8 @@ function handleDrag<T>(
   };
 
   const dragEnd = () => {
-    const controller = sortable().itemEntries.get(item)?.animationController;
+    const controller =
+      currentDragList().itemEntries.get(item)?.animationController;
     const itemRef = getItemRef();
     if (controller != null) {
       controller
@@ -374,7 +375,7 @@ function createDragState<T>(): DragState<T> {
   };
 }
 
-export interface GroupItemEntry {
+export interface GroupItem {
   readonly state: ItemState;
   readonly dispose: () => void;
   readonly idx: Accessor<number>;
@@ -383,23 +384,23 @@ export interface GroupItemEntry {
   readonly setIsMouseDown: (value: Accessor<boolean>) => void;
 }
 
-export interface SortableGroup<T> {
-  readonly sortables: Set<SortableRef<T>>;
+export interface DragListGroup<T> {
+  readonly members: Set<DragListRef<T>>;
   readonly dragState: DragState<T>;
-  readonly props: InheritableSortableProps;
+  readonly props: InheritableDragListProps;
   readonly owner: Owner | null;
-  readonly itemEntries: Map<T, GroupItemEntry>;
-  readonly render: (props: SortableItemProps<T>) => GroupItemEntry;
+  readonly itemEntries: Map<T, GroupItem>;
+  readonly render: (props: DragListRenderProps<T>) => GroupItem;
 }
 
-function createSortableGroup<T>(
-  props: InheritableSortableProps,
-  render?: (props: SortableItemProps<T>) => JSX.Element,
-): SortableGroup<T> {
-  const itemEntries = new Map<T, GroupItemEntry>();
+function createDragListGroup<T>(
+  props: InheritableDragListProps,
+  render?: (props: DragListRenderProps<T>) => JSX.Element,
+): DragListGroup<T> {
+  const itemEntries = new Map<T, GroupItem>();
 
   return {
-    sortables: new Set(),
+    members: new Set(),
     dragState: createDragState<T>(),
     props,
     owner: getOwner(),
@@ -411,7 +412,7 @@ function createSortableGroup<T>(
 
       const entry = itemEntries.get(item);
       if (entry == null) {
-        const createEntry: GroupItemEntry = createRoot((dispose) => {
+        const createEntry: GroupItem = createRoot((dispose) => {
           const [entryIdx, setEntryIdx] = createSignal<Accessor<number>>(idx);
           const [entryIsMouseDown, setEntryIsMouseDown] =
             createSignal<Accessor<boolean>>(isMouseDown);
@@ -446,19 +447,19 @@ function createSortableGroup<T>(
   };
 }
 
-export function createSortableGroupContext<T>() {
-  return createContext<SortableGroup<T>>();
+export function createDragListGroupContext<T>() {
+  return createContext<DragListGroup<T>>();
 }
 
-export function SortableGroupContext<T>(
+export function DragListGroupContext<T>(
   props: {
-    readonly context: Context<SortableGroup<T> | undefined>;
-    readonly render?: (props: SortableItemProps<T>) => JSX.Element;
+    readonly context: Context<DragListGroup<T> | undefined>;
+    readonly render?: (props: DragListRenderProps<T>) => JSX.Element;
     readonly children: JSX.Element;
-  } & InheritableSortableProps,
+  } & InheritableDragListProps,
 ) {
   const [local, others] = splitProps(props, ["context", "children", "render"]);
-  const group = createSortableGroup<T>(others, local.render);
+  const group = createDragListGroup<T>(others, local.render);
   return (
     <local.context.Provider value={group}>
       {local.children}
@@ -466,7 +467,7 @@ export function SortableGroupContext<T>(
   );
 }
 
-export interface SortableCallbacks<T> {
+export interface DragListCallbacks<T> {
   readonly onClick?: (idx: number) => void;
   readonly onDragStart?: (idx: number) => void;
   readonly onDragEnd?: (
@@ -479,7 +480,7 @@ export interface SortableCallbacks<T> {
   readonly onHoldOver?: (fromIdx: number, toIdx: number) => void;
 }
 
-interface InheritableSortableProps {
+interface InheritableDragListProps {
   readonly animated?: boolean;
   readonly timingFunction?: TimingFunction;
   readonly animationDurationMs?: number;
@@ -492,7 +493,7 @@ interface InheritableSortableProps {
   readonly clickThreshholdDistancePx?: number;
 }
 
-const defaultInheritableSortableProps = {
+const defaultInheritableProps = {
   timingFunction: linear,
   animationDurationMs: 250,
   moveThreshhold: 0.5,
@@ -500,12 +501,12 @@ const defaultInheritableSortableProps = {
   clickThreshholdDistancePx: 8,
 };
 
-interface SortableProps<T>
-  extends InheritableSortableProps,
-    SortableCallbacks<T> {
+interface DragListProps<T>
+  extends InheritableDragListProps,
+    DragListCallbacks<T> {
   readonly each: ReadonlyArray<T>;
 
-  readonly group?: Context<SortableGroup<T> | undefined>; // non-reactive
+  readonly group?: Context<DragListGroup<T> | undefined>; // non-reactive
 
   readonly shouldInsert?: (item: T) => boolean;
 }
@@ -513,7 +514,7 @@ interface SortableProps<T>
 interface ItemEntry {
   readonly idx: Accessor<number>;
   readonly state: ItemState;
-  animationController?: SortableAnimationController;
+  animationController?: AnimationController;
 }
 
 interface ItemState {
@@ -522,14 +523,14 @@ interface ItemState {
   readonly handleRefs: SetSignal<HTMLElement>;
 }
 
-export function Sortable<T, U extends JSX.Element>(
-  props: SortableProps<T> & {
-    readonly children?: (props: SortableItemProps<T>) => U; // non-reactive
+export function DragList<T, U extends JSX.Element>(
+  props: DragListProps<T> & {
+    readonly children?: (props: DragListRenderProps<T>) => U; // non-reactive
   },
 ) {
   let childRef!: HTMLDivElement;
   let parentRef!: HTMLElement;
-  let sortableRef!: SortableRef<T>;
+  let dragListRef!: DragListRef<T>;
 
   const itemEntries = new Map<T, ItemEntry>();
 
@@ -539,8 +540,8 @@ export function Sortable<T, U extends JSX.Element>(
 
   const resolvedProps =
     group != null
-      ? mergeProps(defaultInheritableSortableProps, group.props, props)
-      : mergeProps(defaultInheritableSortableProps, props);
+      ? mergeProps(defaultInheritableProps, group.props, props)
+      : mergeProps(defaultInheritableProps, props);
 
   const isMouseDownSelector = createSelector(
     () => dragState.dragging(),
@@ -549,20 +550,20 @@ export function Sortable<T, U extends JSX.Element>(
 
   onMount(() => {
     if (childRef.parentElement == null) {
-      console.error("sortable must have parent element");
+      console.error("drag list must have parent element");
       return;
     } else {
       parentRef = childRef.parentElement;
     }
 
-    sortableRef = {
+    dragListRef = {
       parent: parentRef,
       props: resolvedProps,
       itemEntries,
     };
 
-    group?.sortables.add(sortableRef);
-    onCleanup(() => group?.sortables.delete(sortableRef));
+    group?.members.add(dragListRef);
+    onCleanup(() => group?.members.delete(dragListRef));
   });
 
   return (
@@ -601,7 +602,7 @@ export function Sortable<T, U extends JSX.Element>(
           const animatedMemo = createMemo(() => resolvedProps.animated);
           createEffect(() => {
             if (animatedMemo() ?? false) {
-              const controller = createSortableAnimationController(
+              const controller = createAnimationController(
                 state.ref(),
                 () => resolvedProps.timingFunction,
                 () => resolvedProps.animationDurationMs,
@@ -636,7 +637,7 @@ export function Sortable<T, U extends JSX.Element>(
           const mouseDownListener = (e: MouseEvent) => {
             dragState.setDragging(item);
             runWithOwner(owner, () =>
-              handleDrag(e, sortableRef, group, dragState, item),
+              handleDrag(e, dragListRef, group, dragState, item),
             );
           };
 
@@ -667,9 +668,9 @@ function createState(
   const handleRefs = createSetSignal<HTMLElement>();
 
   const resolved = children(() => (
-    <SortableDirectiveContext.Provider value={handleRefs}>
+    <DragListHandleContext.Provider value={handleRefs}>
       {render()}
-    </SortableDirectiveContext.Provider>
+    </DragListHandleContext.Provider>
   ));
 
   const ref = createMemo(
@@ -681,7 +682,7 @@ function createState(
           arr[0].style.zIndex = "0";
           return arr[0];
         } else {
-          throw Error("sortable child did not resolve to a DOM node");
+          throw Error("drag list child did not resolve to a DOM node");
         }
       },
     ),

@@ -1,5 +1,5 @@
 {
-  "name": "solid-sortable",
+  "name": "solid-drag-list",
   "version": "0.1.0",
   "description": "reactive drag and drop lists",
   "license": "MIT",
@@ -7,11 +7,11 @@
   "contributors": [],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/wilgaboury/solid-sortable.git"
+    "url": "git+https://github.com/wilgaboury/solid-drag-list.git"
   },
-  "homepage": "https://github.com/wilgaboury/solid-sortable#readme",
+  "homepage": "https://github.com/wilgaboury/solid-drag-list#readme",
   "bugs": {
-    "url": "https://github.com/wilgaboury/solid-sortable/issues"
+    "url": "https://github.com/wilgaboury/solid-drag-list/issues"
   },
   "files": [
     "dist"

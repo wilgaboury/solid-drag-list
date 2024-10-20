@@ -60,7 +60,7 @@ function frame(time: DOMHighResTimeStamp) {
   requestAnimationFrame(frame);
 }
 
-export interface SortableAnimationController {
+export interface AnimationController {
   readonly start: (position?: Position) => Promise<void>;
   readonly stop: () => void;
   readonly running: () => boolean;
@@ -70,11 +70,11 @@ export interface SortableAnimationController {
 const defaultTimingFunc = linear;
 const defaultAnimDurMs = 200;
 
-export function createSortableAnimationController(
+export function createAnimationController(
   element: HTMLElement,
   timingFuncArg?: () => TimingFunction | undefined,
   animDurMsArg?: () => number | undefined,
-): SortableAnimationController {
+): AnimationController {
   const timingFunc = () => timingFuncArg?.() ?? defaultTimingFunc;
   const animDurMs = () => animDurMsArg?.() ?? defaultAnimDurMs;
 
