@@ -100,9 +100,13 @@ export function createSetSignal<T>(init?: ReadonlyArray<T>): SetSignal<T> {
   };
 }
 
+export type Full<T> = {
+  [P in keyof T]-?: T[P];
+};
+
 export function defaultMutationEventListeners<T>(
   set: Setter<Array<T>> | Setter<ReadonlyArray<T>>,
-): DragListMutationEvents<T> {
+): Full<DragListMutationEvents<T>> {
   const setAny = set as any;
   return {
     onMove: (from, to) =>

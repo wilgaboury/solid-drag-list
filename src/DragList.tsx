@@ -237,7 +237,10 @@ function handleDrag<T>(
     let mostIntersectingArea = 0;
 
     for (const member of group.members) {
-      if (currentDragList() == member) {
+      if (
+        currentDragList() == member ||
+        !(member.props.shouldInsert?.(item) ?? true)
+      ) {
         continue;
       }
 
