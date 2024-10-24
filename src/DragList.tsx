@@ -5,8 +5,10 @@ import {
   For,
   JSX,
   Owner,
+  Show,
   batch,
   children,
+  createComputed,
   createContext,
   createEffect,
   createMemo,
@@ -27,6 +29,8 @@ import {
 import { AnimationController, createAnimationController } from "./animation";
 import {
   Position,
+  Rect,
+  Size,
   area,
   clientToRelative,
   dist,
@@ -118,6 +122,7 @@ function handleDrag<T>(
   let itemRelativeDragPosition: Position = elemParentRelativeRect(
     currentDragList().itemEntries.get(item)!.state.ref(),
   );
+  dragState.setLayoutPosition(itemRelativeDragPosition);
 
   let insideDragList = true;
 
@@ -172,6 +177,7 @@ function handleDrag<T>(
     itemRef.style.transform = "";
 
     const layoutRect = elemParentRelativeRect(itemRef);
+    queueMicrotask(() => dragState.setLayoutPosition(layoutRect));
 
     itemRelativeDragPosition = {
       x:
@@ -344,6 +350,7 @@ function handleDrag<T>(
     }
 
     dragState.setDragging(undefined);
+    dragState.setLayoutPosition(undefined);
     document.removeEventListener("mousemove", mouseMoveListener);
     document.removeEventListener("scroll", scrollListener);
     document.removeEventListener("mouseup", mouseUpListener);
@@ -365,13 +372,18 @@ function addGlobalCursorGrabbingStyle(): () => void {
 interface DragState<T> {
   readonly dragging: Accessor<T | undefined>;
   readonly setDragging: (value: T | undefined) => void;
+  readonly layoutPosition: Accessor<Position | undefined>;
+  readonly setLayoutPosition: (value: Position | undefined) => void;
 }
 
 function createDragState<T>(): DragState<T> {
   const [dragging, setDragging] = createSignal<T>();
+  const [layoutPosition, setLayoutPosition] = createSignal<Position>();
   return {
     dragging,
     setDragging,
+    layoutPosition,
+    setLayoutPosition,
   };
 }
 
@@ -484,6 +496,8 @@ export interface DragListEvents<T> extends DragListMutationEvents<T> {
 }
 
 interface InheritableDragListProps {
+  readonly fallback?: () => JSX.Element;
+
   readonly animated?: boolean;
   readonly timingFunction?: TimingFunction;
   readonly animationDurationMs?: number;
@@ -557,6 +571,14 @@ export function DragList<T, U extends JSX.Element>(
       parentRef = childRef.parentElement;
     }
 
+    createEffect(() => {
+      if (resolvedProps.fallback != null) {
+        const prev = parentRef.style.position;
+        parentRef.style.position = "relative";
+        onCleanup(() => (parentRef.style.position = prev));
+      }
+    });
+
     dragListRef = {
       parent: parentRef,
       props: resolvedProps,
@@ -570,6 +592,19 @@ export function DragList<T, U extends JSX.Element>(
   return (
     <>
       <div ref={childRef} style={{ display: "none" }} />
+      <Show
+        when={
+          resolvedProps.fallback != null &&
+          dragState.dragging() != null &&
+          resolvedProps.each.includes(dragState.dragging()!)
+        }
+      >
+        <Fallback
+          render={resolvedProps.fallback!}
+          dragState={dragState}
+          itemEntries={itemEntries}
+        />
+      </Show>
       <For each={resolvedProps.each}>
         {(item, idx) => {
           const isMouseDown = createMemo(() => isMouseDownSelector(item));
@@ -694,4 +729,51 @@ function createState(
     resolved,
     handleRefs,
   };
+}
+
+function Fallback<T>(props: {
+  render: () => JSX.Element;
+  dragState: DragState<T>;
+  itemEntries: Map<T, ItemEntry>;
+}) {
+  const position = () => props.dragState.layoutPosition();
+  const [size, setSize] = createSignal<Size>();
+
+  createComputed(() => {
+    const dragging = props.dragState.dragging();
+    if (dragging != null) {
+      const itemEntry = props.itemEntries.get(dragging);
+      if (itemEntry != null) {
+        const observer = new ResizeObserver((entries) => {
+          for (const entry of entries) {
+            // TODO: this will have issues if using vertical languages
+            setSize({
+              width: entry.borderBoxSize[0]!.inlineSize,
+              height: entry.borderBoxSize[0]!.blockSize,
+            });
+          }
+        });
+
+        observer.observe(itemEntry.state.ref());
+        onCleanup(() => observer.disconnect());
+      }
+    }
+    return undefined;
+  });
+  return (
+    <Show when={position() != null && size() != null}>
+      <div
+        style={{
+          position: "absolute",
+          top: "0",
+          left: "0",
+          height: `${size()!.height}px`,
+          width: `${size()!.width}px`,
+          transform: `translate(${position()!.x}px, ${position()!.y}px)`,
+        }}
+      >
+        {props.render()}
+      </div>
+    </Show>
+  );
 }
