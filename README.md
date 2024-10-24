@@ -12,7 +12,7 @@ currently undergoing rapid development, so I wouldn't reccomend using it for pro
 
 ## Quick start
 
-<!-- Install it:
+#### Install
 
 ```bash
 npm i solid-drag-list
@@ -20,15 +20,45 @@ npm i solid-drag-list
 yarn add solid-drag-list
 # or
 pnpm add solid-drag-list
-``` -->
+```
 
-Use it:
+#### Import
 
 ```ts
 import { DragList } from "solid-drag-list";
 ```
 
-Add to project to use drag handle directive in typescript:
+#### Use
+
+```tsx
+function Component() {
+  const [items, setItems] = createSignal<number[]>(
+    Array.from(Array(10).keys()),
+  );
+  return (
+    <div style={{ display: "flex" }}>
+      <DragList each={items()} {...defaultMutationEventListeners(setItems)}>
+        {({ item, idx }) => <div>...</div>}
+      </DragList>
+    </div>
+  );
+}
+```
+
+Elements inside of a drag list can be designated as a drag handle using the `dragHandle` directive:
+
+```tsx
+<DragList each={items()} {...defaultMutationEventListeners(setItems)}>
+  {({ item, idx }) => (
+    <div class="container">
+      <div use:dragHandle class="handle" />
+      <div class="content">...</div>
+    </div>
+  )}
+</DragList>
+```
+
+If using typscript, add the following code to your project to use the directive:
 
 ```ts
 declare module "solid-js" {
@@ -40,11 +70,11 @@ declare module "solid-js" {
 }
 ```
 
-## Obligatory Feature List
+## Features
 
-- animations
-- custom layouts
-- autoscroll
-- drag from one list to another
 - data-driven, reactive API
-- specify drag handle (custom directive)
+- animations
+- seamlessly use any browser layout (including CSS Flexbox and Grid)
+- drag groups (drag items between lists)
+- distiguishes between click and drag events
+- custom placeholders

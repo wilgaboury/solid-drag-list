@@ -81,7 +81,7 @@ export const GridPage: Component = () => {
       <div
         style={{
           display: "flex",
-          "align-items": "start",
+          "align-items": "stretch",
           gap: "40px",
         }}
       >
@@ -147,6 +147,7 @@ export const GridPage: Component = () => {
               "min-width": "100px",
               "min-height": "100px",
               "background-color": "lightblue",
+              "align-content": "start",
             }}
           >
             <DragList
@@ -180,6 +181,7 @@ export const GridPage: Component = () => {
               "min-width": "100px",
               "min-height": "100px",
               "background-color": "lightblue",
+              "align-content": "start",
             }}
           >
             <DragList
@@ -201,6 +203,7 @@ export const GridPage: Component = () => {
               "min-width": "100px",
               "min-height": "100px",
               "background-color": "lightblue",
+              "align-content": "start",
             }}
           >
             <DragList
