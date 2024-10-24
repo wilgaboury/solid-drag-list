@@ -153,7 +153,7 @@ export const GridPage: Component = () => {
               group={ExampleGroupContext}
               each={elements()}
               {...defaultMutationEventListeners(setElements)}
-              fallback={() => (
+              placeholder={(item) => (
                 <div
                   style={{
                     width: "100%",
@@ -161,7 +161,9 @@ export const GridPage: Component = () => {
                     "background-color": "gray",
                     "border-radius": "10px",
                   }}
-                />
+                >
+                  {item}
+                </div>
               )}
             />
           </div>

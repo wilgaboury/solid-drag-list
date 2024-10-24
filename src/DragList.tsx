@@ -166,7 +166,7 @@ function handleDrag<T>(
           currentDragList().props.clickThresholdDurationMs)
     ) {
       cancelClick = true;
-      currentDragList().props.onDragStart?.(startIdx);
+      currentDragList().props.onDragStart?.(item, startIdx);
       cleanupGlobalCursorGrabbingStyle = addGlobalCursorGrabbingStyle();
     }
   };
@@ -269,6 +269,7 @@ function handleDrag<T>(
 
       if (idx >= 0) {
         currentDragList().props.onRemove?.(
+          item,
           currentDragList().itemEntries.get(item)!.idx(),
         );
         if (currentDragList().itemEntries.has(item)) {
@@ -300,6 +301,7 @@ function handleDrag<T>(
       if (idx >= 0) {
         cancelClick = true;
         currentDragList().props.onMove?.(
+          item,
           currentDragList().itemEntries.get(item)!.idx(),
           idx,
         );
@@ -323,15 +325,17 @@ function handleDrag<T>(
 
   const mouseUpListener = () => {
     if (currentDragList().props.onClick != null && !cancelClick) {
-      currentDragList().props.onClick!(startIdx);
+      currentDragList().props.onClick!(item, startIdx);
     } else if (initialDragList == currentDragList()) {
       currentDragList().props.onDragEnd?.(
+        item,
         startIdx,
         currentDragList().itemEntries.get(item)!.idx(),
       );
     } else {
-      initialDragList.props.onDragEnd?.(startIdx, undefined);
+      initialDragList.props.onDragEnd?.(item, startIdx, undefined);
       currentDragList().props.onDragEnd?.(
+        item,
         undefined,
         currentDragList().itemEntries.get(item)!.idx(),
       );
@@ -402,14 +406,14 @@ export interface GroupItem {
 export interface DragListGroup<T> {
   readonly members: Set<DragListRef<T>>;
   readonly dragState: DragState<T>;
-  readonly props: InheritableDragListProps;
+  readonly props: InheritableDragListProps<T>;
   readonly owner: Owner | null;
   readonly itemEntries: Map<T, GroupItem>;
   readonly render: (props: DragListRenderProps<T>) => GroupItem;
 }
 
 function createDragListGroup<T>(
-  props: InheritableDragListProps,
+  props: InheritableDragListProps<T>,
   render?: (props: DragListRenderProps<T>) => JSX.Element,
 ): DragListGroup<T> {
   const itemEntries = new Map<T, GroupItem>();
@@ -471,7 +475,7 @@ export function DragListGroupContext<T>(
     readonly context: Context<DragListGroup<T> | undefined>;
     readonly render?: (props: DragListRenderProps<T>) => JSX.Element;
     readonly children: JSX.Element;
-  } & InheritableDragListProps,
+  } & InheritableDragListProps<T>,
 ) {
   const [local, others] = splitProps(props, ["context", "children", "render"]);
   const group = createDragListGroup<T>(others, local.render);
@@ -483,23 +487,23 @@ export function DragListGroupContext<T>(
 }
 
 export interface DragListMutationEvents<T> {
-  readonly onMove?: (fromIdx: number, toIdx: number) => void;
-  readonly onRemove?: (idx: number) => void;
+  readonly onMove?: (item: T, fromIdx: number, toIdx: number) => void;
   readonly onInsert?: (item: T, idx: number) => void;
+  readonly onRemove?: (item: T, idx: number) => void;
 }
 
 export interface DragListEvents<T> extends DragListMutationEvents<T> {
-  readonly onDragStart?: (idx: number) => void;
+  readonly onDragStart?: (item: T, idx: number) => void;
   readonly onDragEnd?: (
+    item: T,
     startIdx: number | undefined,
     endIdx: number | undefined,
   ) => void;
-  readonly onClick?: (idx: number) => void;
-  readonly onHoldOver?: (fromIdx: number, toIdx: number) => void;
+  readonly onClick?: (item: T, idx: number) => void;
 }
 
-interface InheritableDragListProps {
-  readonly fallback?: () => JSX.Element;
+interface InheritableDragListProps<T> {
+  readonly placeholder?: (item: T) => JSX.Element;
 
   readonly animated?: boolean;
   readonly timingFunction?: TimingFunction;
@@ -521,7 +525,9 @@ const defaultInheritableProps = {
   clickThreshholdDistancePx: 8,
 };
 
-interface DragListProps<T> extends InheritableDragListProps, DragListEvents<T> {
+interface DragListProps<T>
+  extends InheritableDragListProps<T>,
+    DragListEvents<T> {
   readonly each: ReadonlyArray<T>;
 
   readonly group?: Context<DragListGroup<T> | undefined>; // non-reactive
@@ -575,7 +581,7 @@ export function DragList<T, U extends JSX.Element>(
     }
 
     createEffect(() => {
-      if (resolvedProps.fallback != null) {
+      if (resolvedProps.placeholder != null) {
         const prev = parentRef.style.position;
         parentRef.style.position = "relative";
         onCleanup(() => (parentRef.style.position = prev));
@@ -597,13 +603,13 @@ export function DragList<T, U extends JSX.Element>(
       <div ref={childRef} style={{ display: "none" }} />
       <Show
         when={
-          resolvedProps.fallback != null &&
+          resolvedProps.placeholder != null &&
           dragState.dragging() != null &&
           resolvedProps.each.includes(dragState.dragging()!)
         }
       >
-        <Fallback
-          render={resolvedProps.fallback!}
+        <Placeholder
+          render={resolvedProps.placeholder!}
           dragState={dragState}
           itemEntries={itemEntries}
         />
@@ -734,8 +740,8 @@ function createState(
   };
 }
 
-function Fallback<T>(props: {
-  render: () => JSX.Element;
+function Placeholder<T>(props: {
+  render: (item: T) => JSX.Element;
   dragState: DragState<T>;
   itemEntries: Map<T, ItemEntry>;
 }) {
@@ -764,7 +770,13 @@ function Fallback<T>(props: {
     return undefined;
   });
   return (
-    <Show when={position() != null && size() != null}>
+    <Show
+      when={
+        props.dragState.dragging() != null &&
+        position() != null &&
+        size() != null
+      }
+    >
       <div
         style={{
           position: "absolute",
@@ -775,7 +787,7 @@ function Fallback<T>(props: {
           transform: `translate(${position()!.x}px, ${position()!.y}px)`,
         }}
       >
-        {props.render()}
+        {props.render(props.dragState.dragging()!)}
       </div>
     </Show>
   );

@@ -109,11 +109,11 @@ export function defaultMutationEventListeners<T>(
 ): Full<DragListMutationEvents<T>> {
   const setAny = set as any;
   return {
-    onMove: (from, to) =>
+    onMove: (_item, from, to) =>
       setAny((arr: Array<T> | ReadonlyArray<T>) => move(arr, from, to)),
     onInsert: (item, idx) =>
       setAny((arr: Array<T> | ReadonlyArray<T>) => arr.toSpliced(idx, 0, item)),
-    onRemove: (idx) =>
+    onRemove: (_item, idx) =>
       setAny((arr: Array<T> | ReadonlyArray<T>) => arr.toSpliced(idx, 1)),
   };
 }
