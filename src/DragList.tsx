@@ -93,6 +93,7 @@ function handleDrag<T>(
   group: DragListGroup<T> | undefined,
   dragState: DragState<T>,
   item: T,
+  dispose: () => any,
 ) {
   const [currentDragList, setCurrentDragList] =
     createSignal<DragListRef<T>>(initialDragList);
@@ -126,7 +127,23 @@ function handleDrag<T>(
 
   let insideDragList = true;
 
-  createEffect(() => (getItemRef().style.zIndex = "1"));
+  createEffect(() => {
+    const itemRef = getItemRef();
+    itemRef.style.zIndex = "1";
+    onCleanup(() => {
+      const controller =
+        currentDragList().itemEntries.get(item)?.animationController;
+      if (controller != null) {
+        controller
+          .start(itemRelativeDragPosition)
+          .then(() => (itemRef.style.zIndex = "0"));
+      } else {
+        itemRef.style.zIndex = "0";
+        itemRef.style.transform = "";
+      }
+    });
+  });
+
   createEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -225,7 +242,7 @@ function handleDrag<T>(
     return -1;
   };
 
-  const checkAndRunRemoveInsertHooks = () => {
+  const maybeFireRemoveInsertEvents = () => {
     if (group == null || group.members.size <= 1) {
       return;
     }
@@ -293,34 +310,43 @@ function handleDrag<T>(
     }
   };
 
-  const updateTransformAndRunHooks = () => {
+  let prevMove: T | undefined;
+
+  const updateTransformAndFireEvents = () => {
     updateTransform();
 
     if (insideDragList) {
       const idx = checkMove(currentDragList());
       if (idx >= 0) {
-        cancelClick = true;
-        currentDragList().props.onMove?.(
-          item,
-          currentDragList().itemEntries.get(item)!.idx(),
-          idx,
-        );
-        updateTransform();
+        const toItem = currentDragList().props.each[idx];
+        // this check ensures different sized items do not cause back and forth movement events
+        if (toItem != prevMove) {
+          prevMove = toItem;
+          cancelClick = true;
+          currentDragList().props.onMove?.(
+            item,
+            currentDragList().itemEntries.get(item)!.idx(),
+            idx,
+          );
+          updateTransform();
+        }
+      } else {
+        prevMove = undefined;
       }
     } else {
-      checkAndRunRemoveInsertHooks();
+      maybeFireRemoveInsertEvents();
     }
   };
 
   const mouseMoveListener = (e: MouseEvent) => {
     mouseClientPosition = { x: e.clientX, y: e.clientY };
     updateMouseRelativePosition();
-    updateTransformAndRunHooks();
+    updateTransformAndFireEvents();
   };
 
   const scrollListener = () => {
     updateMouseRelativePosition();
-    updateTransformAndRunHooks();
+    updateTransformAndFireEvents();
   };
 
   const mouseUpListener = () => {
@@ -345,23 +371,13 @@ function handleDrag<T>(
   };
 
   const dragEnd = () => {
-    const controller =
-      currentDragList().itemEntries.get(item)?.animationController;
-    const itemRef = getItemRef();
-    if (controller != null) {
-      controller
-        .start(itemRelativeDragPosition)
-        .then(() => (itemRef.style.zIndex = "0"));
-    } else {
-      itemRef.style.transform = "";
-    }
-
     dragState.setDragging(undefined);
     dragState.setLayoutPosition(undefined);
     document.removeEventListener("mousemove", mouseMoveListener);
     document.removeEventListener("scroll", scrollListener);
     document.removeEventListener("mouseup", mouseUpListener);
     cleanupGlobalCursorGrabbingStyle?.();
+    dispose();
   };
 
   document.addEventListener("mousemove", mouseMoveListener);
@@ -500,6 +516,12 @@ export interface DragListEvents<T> extends DragListMutationEvents<T> {
     endIdx: number | undefined,
   ) => void;
   readonly onClick?: (item: T, idx: number) => void;
+  readonly onHoldOver?: (
+    dragging: T,
+    over: T,
+    from: number,
+    to: number,
+  ) => void;
 }
 
 interface InheritableDragListProps<T> {
@@ -579,6 +601,8 @@ export function DragList<T, U extends JSX.Element>(
     } else {
       parentRef = childRef.parentElement;
     }
+
+    parentRef.draggable = false;
 
     createEffect(() => {
       if (resolvedProps.placeholder != null) {
@@ -679,10 +703,21 @@ export function DragList<T, U extends JSX.Element>(
             }
           });
 
+          createEffect(() => {
+            const ref = state.ref();
+            ref.draggable = false;
+          });
+
+          createEffect(() => {
+            for (const handle of state.handleRefs.get()) {
+              handle.draggable = false;
+            }
+          });
+
           const mouseDownListener = (e: MouseEvent) => {
             dragState.setDragging(item);
-            runWithOwner(owner, () =>
-              handleDrag(e, dragListRef, group, dragState, item),
+            createRoot((dispose) =>
+              handleDrag(e, dragListRef, group, dragState, item, dispose),
             );
           };
 

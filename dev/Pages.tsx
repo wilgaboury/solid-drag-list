@@ -1,6 +1,6 @@
 import { A, Route, Router } from "@solidjs/router";
-import { TransformMeasureTest } from "./TransformMeasureTest";
-import { GridPage } from "./Grid";
+import { GridPage } from "./GridPage";
+import { FlexPage } from "./FlexPage";
 
 export function Pages() {
   return (
@@ -10,19 +10,16 @@ export function Pages() {
         component={() => (
           <ul>
             <li>
-              <A href="/layout-explorer">Layout Explorer</A>
-            </li>
-            <li>
-              <A href="/transform-measure-test">Transform Measure Test</A>
-            </li>
-            <li>
               <A href="/grid-test">Grid Test</A>
+            </li>
+            <li>
+              <A href="/flex-test">Flex Test</A>
             </li>
           </ul>
         )}
       />
-      <Route path="/transform-measure-test" component={TransformMeasureTest} />
       <Route path="/grid-test" component={GridPage} />
+      <Route path="/flex-test" component={FlexPage} />
     </Router>
   );
 }

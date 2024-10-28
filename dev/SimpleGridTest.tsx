@@ -1,5 +1,5 @@
 import { createAnimationController } from "../src/animation";
-import { randomColor } from "./Grid";
+import { randomColor } from "./GridPage";
 import { onMount } from "solid-js";
 
 export function SimpleGridTest() {
